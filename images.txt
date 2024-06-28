@@ -1,1 +1,1 @@
-jvmilazz0/kavita
+lscr.io/linuxserver/calibre-web
