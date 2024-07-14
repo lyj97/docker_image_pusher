@@ -1,1 +1,1 @@
-wordpress
+jeessy/ddns-go
