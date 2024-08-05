@@ -1,1 +1,1 @@
-wordpress
+frooodle/s-pdf
