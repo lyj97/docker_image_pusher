@@ -1,1 +1,1 @@
-hsuyelin/nas-tools
+lscr.io/linuxserver/qbittorrent
