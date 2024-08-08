@@ -1,1 +1,1 @@
-paddlepaddle/paddle
+portainer/portainer-ce
