@@ -1,1 +1,1 @@
-paddlepaddle/paddle:latest-dev-cuda10.1-cudnn7-gcc82
+paddlepaddle/paddle
