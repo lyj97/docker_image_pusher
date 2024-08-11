@@ -1,1 +1,1 @@
-emqx/emqx
+portainer/portainer-ce:2.20.3
