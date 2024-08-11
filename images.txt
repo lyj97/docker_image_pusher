@@ -1,1 +1,1 @@
-portainer/portainer-ce:2.20.3
+frooodle/s-pdf:0.27.0
