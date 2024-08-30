@@ -1,1 +1,1 @@
-filebrowser/filebrowser
+cloudreve/cloudreve:latest
