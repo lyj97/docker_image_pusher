@@ -1,1 +1,1 @@
-pymumu/smartdns:latest
+mysql:latest
