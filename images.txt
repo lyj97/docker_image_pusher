@@ -1,1 +1,1 @@
-redis:latest
+nodered/node-red:latest
