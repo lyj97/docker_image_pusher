@@ -1,1 +1,1 @@
-imsyy/splayer:latest
+linuxserver/wireguard:latest
