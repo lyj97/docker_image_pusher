@@ -1,1 +1,1 @@
-nikolaik/python-nodejs:python3.11-nodejs20
+python:3.12-slim-bookworm
