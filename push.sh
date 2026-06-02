@@ -47,7 +47,7 @@ echo "✅ 已 push 到 GitHub"
 
 # ─── 等待 Actions 触发，获取 run_id ──────────────────────────
 echo "[2/3] 等待 GitHub Actions 触发..."
-sleep 5
+sleep 15
 
 RUN_ID=""
 for i in {1..10}; do
