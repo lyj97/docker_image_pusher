@@ -1,1 +1,1 @@
-node:20
+portainer/portainer-ce:lts
