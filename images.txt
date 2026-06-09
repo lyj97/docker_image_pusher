@@ -1,1 +1,2 @@
-portainer/portainer-ce:lts
+metacubex/mihomo:Alpha
+ghcr.io/metacubex/metacubexd:latest
