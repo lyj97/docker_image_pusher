@@ -1,5 +1,1 @@
-metacubex/mihomo:Alpha
-ghcr.io/metacubex/metacubexd:latest
-weishaw/sub2api:latest
-redis:8-alpine
-postgres:18-alpine
+portainer/portainer-ce:lts
