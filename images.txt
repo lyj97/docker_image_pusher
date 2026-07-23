@@ -1,1 +1,1 @@
-portainer/portainer-ce:lts
+postgres:18-alpine
