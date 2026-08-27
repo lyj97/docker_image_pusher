@@ -1,7 +1,7 @@
-docker/dockerfile:1
-node:22-slim
-golang:1.24
-postgres:17
-redis:alpine
-rabbitmq:3-management
-foundationdb/foundationdb:7.3.63
+--platform linux/arm64 docker/dockerfile:1
+--platform linux/arm64 node:22-slim
+--platform linux/arm64 golang:1.24
+--platform linux/arm64 postgres:17
+--platform linux/arm64 redis:alpine
+--platform linux/arm64 rabbitmq:3-management
+--platform linux/arm64 foundationdb/foundationdb:7.3.63
