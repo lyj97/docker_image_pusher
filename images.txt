@@ -1,1 +1,7 @@
-mattermost/mattermost-enterprise-edition:11.7.0
+docker/dockerfile:1
+node:22-slim
+golang:1.24
+postgres:17
+redis:alpine
+rabbitmq:3-management
+foundationdb/foundationdb:7.3.63
