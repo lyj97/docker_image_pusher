@@ -53,9 +53,9 @@ ALIYUN_NAME_SPACE,ALIYUN_REGISTRY_USER，ALIYUN_REGISTRY_PASSWORD，ALIYUN_REGIS
 
 在国内服务器pull镜像, 例如：<br>
 ```
-docker pull registry.cn-hangzhou.aliyuncs.com/shrimp-images/alpine
+docker pull registry.cn-beijing.aliyuncs.com/shrimp-images/alpine
 ```
-registry.cn-hangzhou.aliyuncs.com 即 ALIYUN_REGISTRY(阿里云仓库地址)<br>
+registry.cn-beijing.aliyuncs.com 即 ALIYUN_REGISTRY(阿里云仓库地址)<br>
 shrimp-images 即 ALIYUN_NAME_SPACE(阿里云命名空间)<br>
 alpine 即 阿里云中显示的镜像名<br>
 
