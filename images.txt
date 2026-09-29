@@ -1,1 +1,1 @@
-caddy:2@sha256:040e9f7480b80b6d4a7e5013a21159b950a63dcbdb956e38abe2387fb28d9ec0
+rustdesk/rustdesk-server:1.1.16
