@@ -1,1 +1,4 @@
 rustdesk/rustdesk-server:1.1.16
+--platform=linux/amd64 golang:1.26.8-bookworm
+--platform=linux/amd64 node:24.21.0-bookworm
+--platform=linux/amd64 python:3.14-bookworm
