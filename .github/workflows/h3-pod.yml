@@ -40,12 +40,12 @@ jobs:
           if [[ "$GITHUB_REPOSITORY" == lyj97/docker_image_pusher ]]; then package=h3-comfy; fi
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$package:service-0.39.0-${revision:0:12}"
           echo "H3_IMAGE=$image" >> "$GITHUB_ENV"
-          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+          docker build --platform linux/amd64 --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$revision" \
             -f deploy/runpod/Dockerfile -t "$image" .
           docker run --rm --network none --entrypoint python3 "$image" -m pip check
           docker run --rm --network none --entrypoint python3 "$image" -B -c \
-            'from h3burst.engine import Engine; from h3burst.pod import Pod; from shared.execution import profiles; import torch; assert torch.__version__ == profiles()[0]["torch_version"]'
+            'from h3burst.engine import Engine; from h3burst.pod import Pod; import h3burst.remote_runner, h3burst.executor, h3burst.control, h3burst.acceptance, h3burst.setup; from shared.execution import profiles; import torch; assert torch.__version__ == profiles()[0]["torch_version"]'
       - name: Publish versioned GHCR image
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
