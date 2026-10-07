@@ -1,5 +1,8 @@
 name: Build H3 thin Pod service
 on:
+  push:
+    branches: [h3-comfy-build]
+    paths: ['.github/workflows/h3-pod.yml']
   workflow_dispatch:
     inputs:
       source_revision:
@@ -30,7 +33,7 @@ jobs:
         with:
           persist-credentials: false
           repository: lyj97/h3-service
-          ref: ${{ inputs.source_revision }}
+          ref: ${{ inputs.source_revision || '53d287edfe0076eeb0d915376ba500b9bca2eb7a' }}
       - name: Build and check without GPU or model download
         run: |
           set -euo pipefail
