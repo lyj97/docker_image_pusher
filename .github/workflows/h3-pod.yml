@@ -1,0 +1,62 @@
+name: Build H3 thin Pod service
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact reviewed h3-service source commit
+        required: true
+        type: string
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: h3-pod-image
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: easimon/maximize-build-space@c28619d8999a147d5e09c1199f84ff6af6ad5794
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-haskell: 'true'
+          remove-android: 'true'
+          build-mount-path: /var/lib/docker
+      - run: sudo service docker restart
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          repository: lyj97/h3-service
+          ref: ${{ inputs.source_revision }}
+      - name: Build and check without GPU or model download
+        run: |
+          set -euo pipefail
+          revision="$(git rev-parse HEAD)"
+          test "${#revision}" -eq 40
+          package=h3-pod
+          if [[ "$GITHUB_REPOSITORY" == lyj97/docker_image_pusher ]]; then package=h3-comfy; fi
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$package:service-0.39.0-${revision:0:12}"
+          echo "H3_IMAGE=$image" >> "$GITHUB_ENV"
+          docker build --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$revision" \
+            -f deploy/runpod/Dockerfile -t "$image" .
+          docker run --rm --network none --entrypoint python3 "$image" -m pip check
+          docker run --rm --network none --entrypoint python3 "$image" -B -c \
+            'from h3burst.engine import Engine; from h3burst.pod import Pod; from shared.execution import profiles; import torch; assert torch.__version__ == profiles()[0]["torch_version"]'
+      - name: Publish versioned GHCR image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$H3_IMAGE"
+          docker buildx imagetools inspect "$H3_IMAGE" > manifest.txt
+          { echo "Image: $H3_IMAGE"; cat manifest.txt; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: h3-pod-manifest
+          path: manifest.txt
+          retention-days: 7
