@@ -1,0 +1,17 @@
+*
+!Dockerfile
+!Dockerfile.official
+!official-startup.sh
+!upgrade-official.sh
+!container-entrypoint.sh
+!prepare_models.py
+!prepare_pod.sh
+!models.lock.json
+!workflow-api.json
+!benchmark.py
+!check_scripts.py
+!storage_cost.py
+!bootstrap_comfy.sh
+!start_comfy.sh
+!runtime-constraints.txt
+!README.md

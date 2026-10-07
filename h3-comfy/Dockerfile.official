@@ -1,0 +1,13 @@
+# Normal service: local model download at startup, no automatic test generation.
+FROM runpod/comfyui:1.3.3-comfyuiv0.30.0-cuda13.0@sha256:e8505fe1ba1b39cc6a140c2f01fe8d8d47f680cc7af45662ec0d77858fba8355
+ARG COMFY_COMMIT=b0b743566f65daafc423b4fea8a2fbda94b3384a
+LABEL io.h3.comfy.version="0.39.0" io.h3.comfy.commit="${COMFY_COMMIT}"
+COPY upgrade-official.sh /opt/h3/upgrade-official.sh
+RUN bash /opt/h3/upgrade-official.sh "${COMFY_COMMIT}"
+COPY official-startup.sh prepare_pod.sh prepare_models.py benchmark.py check_scripts.py \
+     models.lock.json workflow-api.json /opt/h3/
+RUN chmod 755 /opt/h3/*.sh
+ENV H3_STORAGE_ROOT=/workspace H3_COMFY_DIR=/workspace/runpod-slim/ComfyUI \
+    H3_RUN_ROOT=/workspace/h3-runs H3_COMFY_VERSION=0.39.0 PYTHONUNBUFFERED=1
+ENTRYPOINT []
+CMD ["/bin/bash", "/opt/h3/official-startup.sh"]

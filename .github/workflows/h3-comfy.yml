@@ -1,0 +1,84 @@
+name: Build H3 ComfyUI
+on:
+  push:
+    branches: [h3-comfy-build]
+    paths: ['h3-comfy/**', '.github/workflows/h3-comfy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: h3-comfy-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: easimon/maximize-build-space@c28619d8999a147d5e09c1199f84ff6af6ad5794
+        with:
+          root-reserve-mb: 4096
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-haskell: 'true'
+          remove-android: 'true'
+          build-mount-path: /var/lib/docker
+      - run: sudo service docker restart
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Select versioned image names
+        env:
+          ACR_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+          ACR_NAMESPACE: ${{ secrets.ALIYUN_NAME_SPACE }}
+        run: |
+          set -euo pipefail
+          tag="0.39.0-r${GITHUB_RUN_NUMBER}-${GITHUB_SHA:0:7}"
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "GHCR_IMAGE=ghcr.io/$owner/h3-comfy:$tag" >> "$GITHUB_ENV"
+          echo "ACR_IMAGE=$ACR_REGISTRY/$ACR_NAMESPACE/h3-comfy:$tag" >> "$GITHUB_ENV"
+          df -h /var/lib/docker
+          test "$(df --output=avail -B1 /var/lib/docker | tail -1)" -ge 30000000000
+      - name: Check scripts and build AMD64 image
+        run: |
+          set -euo pipefail
+          bash -n h3-comfy/*.sh
+          docker buildx build --platform linux/amd64 --progress plain --load \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -f h3-comfy/Dockerfile.official -t "$GHCR_IMAGE" h3-comfy
+      - name: Verify built image without GPU or model download
+        run: |
+          set -euo pipefail
+          docker run --rm --network none --entrypoint python3 "$GHCR_IMAGE" -m pip check
+          docker run --rm --network none --entrypoint python3 "$GHCR_IMAGE" -B /opt/h3/check_scripts.py
+          docker run --rm --network none --entrypoint python3 \
+            -e PYTHONPATH=/opt/comfyui-baked "$GHCR_IMAGE" -c \
+            'from comfyui_version import __version__; import torch; assert __version__ == "0.39.0"; print("ComfyUI", __version__, "torch", torch.__version__)'
+          docker image inspect "$GHCR_IMAGE" --format '{{.Size}}' > image-size-bytes.txt
+      - name: Publish GHCR
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$GHCR_IMAGE"
+          docker buildx imagetools inspect "$GHCR_IMAGE" > ghcr-manifest.txt
+          {
+            echo "### H3 ComfyUI 0.39.0"
+            echo "Image: $GHCR_IMAGE"
+            echo "Expanded image bytes: $(cat image-size-bytes.txt)"
+            cat ghcr-manifest.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish existing Aliyun backup
+        env:
+          ACR_REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+          ACR_USER: ${{ secrets.ALIYUN_REGISTRY_USER }}
+          ACR_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" -u "$ACR_USER" --password-stdin
+          docker tag "$GHCR_IMAGE" "$ACR_IMAGE"
+          docker push "$ACR_IMAGE"
+          docker buildx imagetools inspect "$ACR_IMAGE" > acr-manifest.txt
+          { echo "Backup: $ACR_IMAGE"; cat acr-manifest.txt; } >> "$GITHUB_STEP_SUMMARY"
