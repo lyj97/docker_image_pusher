@@ -3,6 +3,7 @@
 !deploy/runpod/
 !deploy/runpod/Dockerfile
 !deploy/runpod/check_image.py
+!deploy/runpod/build_nodes.py
 !shared/
 !shared/*.py
 !shared/execution_profiles/

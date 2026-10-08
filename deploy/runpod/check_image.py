@@ -28,6 +28,9 @@ for name, node in nodes.items():
     assert json.loads((root / '.h3-managed-node.json').read_text()) == node
     assert subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip() == node['commit']
     assert not subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=root,text=True).strip()
+    if node['repository'] == 'https://github.com/scraed/LanPaint.git':
+        assert not (root/'examples').exists(), 'demo assets in runtime image'
+        assert subprocess.check_output(['git','config','--get','remote.origin.partialclonefilter'],cwd=root,text=True).strip() == 'blob:none'
 profile = profile_by_id(os.environ.get('H3POD_PROFILE_ID', profiles()[0]['profile_id']))
 assert profile['models']['models'] and profile['workflow_template']['graph']
 print(json.dumps({'profile_id':profile['profile_id'], 'baked_nodes':list(nodes),

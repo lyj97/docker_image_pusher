@@ -1,5 +1,5 @@
 {
-  "source_revision": "cd1baaada3efd051a4c62714494f231e4832a1ef",
+  "source_revision": "8c90dac7da6cf2f52030837ba2ffb04f18b7a105",
   "files": {
     "shared/comfy_versions.py": "fbc97847671199bd9dfd917d253299fb9c2048abb0f315b60d5d5c39d8f1cd39",
     "shared/__init__.py": "2cff6dc6b7c57444d9fe621a167db50e63fbf7a91ca4a013e6da94f2e83b1f7c",
@@ -63,9 +63,10 @@
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
     "burst/h3burst/wait_capacity.py": "08e089d817f8d9181ff17e644383406683e38c385cbe7c187aabec74db779a8b",
     "burst/h3burst/remote_runner.py": "7f51a59a0c90c25c34028c7a6df3cbffba08432d241580f6d0e07cee2c268127",
-    "deploy/runpod/Dockerfile": "68b5a4e6070f7e456ec82eadcda29111e9316afe533ac9b453581879e80550a0",
+    "deploy/runpod/Dockerfile": "8eef8578bd70dc2d3c7b920dc1432212a9b69e4bcb96d2f1a3896aea4fb7da3e",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
-    "deploy/runpod/check_image.py": "91065b906d9b366ea6f210b4eac0d880f70ed16cd347af94d6b36f4c112def06",
-    ".dockerignore": "008e3cfafc7205e7d1db137fc7967185f4280671b36c4a84034d7eaecab25c05"
+    "deploy/runpod/check_image.py": "9ec18f50c2a69acb65bde17e4158f7cd1ad525f8ff8c30768f773e84120f7a28",
+    "deploy/runpod/build_nodes.py": "217495860f3282e69fba69d8c60fb95c1915e110abceec0338d0f2189c878277",
+    ".dockerignore": "a272f5891d78cce164513de4f1dcbdd63a076d6dfc003571af79f5d65705f1da"
   }
 }
