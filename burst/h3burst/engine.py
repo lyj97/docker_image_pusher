@@ -320,7 +320,7 @@ def main():
     protocol_lifespan = app.router.lifespan_context
     app.router.lifespan_context = lifespan
     # Only authenticated protocol exposed. Comfy remains loopback, never /start.sh.
-    uvicorn.run(app, host='0.0.0.0', port=8190, access_log=False, log_level='warning')
+    uvicorn.run(app, host='127.0.0.1', port=8190, access_log=False, log_level='warning')
 
 
 if __name__ == '__main__':

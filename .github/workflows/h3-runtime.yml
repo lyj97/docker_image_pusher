@@ -51,6 +51,9 @@ jobs:
             'from h3burst.engine import Engine; from h3burst.pod import Pod; import h3burst.remote_runner, h3burst.executor, h3burst.control, h3burst.acceptance, h3burst.setup; from shared.execution import profiles; import torch; assert torch.__version__ == profiles()[0]["torch_version"]'
           docker run --rm --network none --entrypoint python3 "$image" \
             -B /opt/h3-service/check_image.py > node-check.txt
+          docker run --rm --network none --entrypoint python3 \
+            -v "$PWD/deploy/runpod/check_ssh.py:/tmp/check_ssh.py:ro" "$image" \
+            -B /tmp/check_ssh.py > ssh-check.txt
           docker image inspect "$image" --format 'Expanded image bytes: {{.Size}}' > image-size.txt
           docker run --rm --network none --entrypoint /bin/bash "$image" -lc \
             'for path in /usr/local/lib /usr/local/cuda /opt/comfyui-baked /opt/h3-service; do if [ -d "$path" ]; then du -x -h "$path"; fi; done | sort -h | tail -40' >> image-size.txt
@@ -90,4 +93,5 @@ jobs:
             manifest.txt
             image-size.txt
             node-check.txt
+            ssh-check.txt
           retention-days: 7

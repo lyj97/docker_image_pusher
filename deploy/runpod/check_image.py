@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 
 from shared.execution import profiles, profile_by_id
 import torch
@@ -22,6 +23,9 @@ for directory in ('/opt/h3-service','/root/.ssh','/root/.aws','/root/.docker'):
 
 assert torch.__version__ == profiles()[0]['torch_version']
 assert os.environ.get('H3POD_BAKED_NODES_REQUIRED') == '1'
+assert Path('/usr/sbin/sshd').is_file() and shutil.which('ssh-keygen')
+assert not list(Path('/etc/ssh').glob('ssh_host_*')), 'SSH host keys baked into image'
+subprocess.run(['/bin/sh', '-n', '/opt/h3-service/start-ssh.sh'], check=True)
 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}
 for name, node in nodes.items():
     root = Path('/opt/comfyui-baked/custom_nodes') / name

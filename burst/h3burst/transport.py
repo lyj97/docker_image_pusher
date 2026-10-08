@@ -41,6 +41,7 @@ class Transport:
             raise ValueError('invalid generation')
         self.token, self.generation, self.timeout = token, generation, timeout
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        self.opener.addheaders = [('User-Agent', 'h3-service/0.39')]
 
     def request(self, path, body=None, method=None):
         if not re.fullmatch(r'/v1/[A-Za-z0-9_/-]+', path):
