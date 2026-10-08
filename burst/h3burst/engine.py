@@ -25,6 +25,18 @@ def file_digest(path):
     return Path(path).stat().st_size, h.hexdigest()
 
 
+def copy_baked_core(source, destination):
+    source = Path(source)
+    def ignore(directory, names):
+        ignored = {'__pycache__'} & set(names)
+        if Path(directory) == source:
+            ignored.update(set(names) & {'custom_nodes', 'models', 'input', 'output', 'user', 'temp'})
+        return ignored
+    shutil.copytree(source, destination, ignore=ignore)
+    if not (Path(destination) / 'comfy/ldm/models/autoencoder.py').is_file():
+        raise RuntimeError('baked Comfy core source is incomplete')
+
+
 class Engine:
     def __init__(self, comfy_root, state_root):
         import vace_smoke
@@ -213,8 +225,7 @@ class Engine:
             # No reinstallation or checkout at task execution time.
             if (self.comfy_root / 'main.py').is_file():
                 raise RuntimeError('dedicated Comfy root already exists; use fresh ephemeral storage')
-            shutil.copytree('/opt/comfyui-baked', self.comfy_root,
-                ignore=shutil.ignore_patterns('custom_nodes', 'models', 'input', 'output', 'user', '__pycache__'))
+            copy_baked_core('/opt/comfyui-baked', self.comfy_root)
             for name in ('models', 'custom_nodes', 'input', 'output', 'user', 'temp'):
                 (self.comfy_root / name).mkdir(mode=0o700, exist_ok=True)
             marker = Path('/opt/comfyui-baked/.runpod-bundle-version').read_text().strip()
@@ -237,7 +248,6 @@ class Engine:
                 command([sys.executable, '-B', '-m', 'h3burst.prepare', '--manifest', str(manifest),
                     '--comfy-root', str(self.comfy_root), '--state', str(self.state_root / 'node-preparation')],
                     self.comfy_root, log, progress, 'approved-nodes', timeout=900, stall=300, cancel_event=self.stop_preparation)
-                self.download_models(profile, log, progress, started)
                 if self.stop_preparation.is_set():
                     raise RuntimeError('preparation cancelled by drain')
                 # Only reviewed nodes enabled; no Manager, partner API or public Comfy.
@@ -270,6 +280,11 @@ class Engine:
                         or int(gpu.get('vram_total', 0)) < profile['min_vram_bytes']
                         or any(n['class_type'] not in nodes for p in profiles() for n in p['workflow_template']['graph'].values())):
                     raise RuntimeError('runtime does not match approved profile')
+                self.download_models(profile, log, progress, started)
+                if self.stop_preparation.is_set():
+                    raise RuntimeError('preparation cancelled by drain')
+                if self.process.poll() is not None:
+                    raise RuntimeError('Comfy exited during model preparation')
                 self.proof = {key: profile[key] for key in ('profile_digest', 'comfy_version',
                     'comfy_commit', 'torch_version', 'models_digest', 'nodes_digest')}
                 self.proof.update(prepared=True, gpu_vendor='nvidia', vram_bytes=int(gpu['vram_total']))

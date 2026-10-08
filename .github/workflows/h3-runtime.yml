@@ -54,6 +54,9 @@ jobs:
           docker run --rm --network none --entrypoint python3 \
             -v "$PWD/deploy/runpod/check_ssh.py:/tmp/check_ssh.py:ro" "$image" \
             -B /tmp/check_ssh.py > ssh-check.txt
+          docker run --rm --network none --entrypoint python3 \
+            -v "$PWD/deploy/runpod/check_comfy_boot.py:/tmp/check_comfy_boot.py:ro" "$image" \
+            -B /tmp/check_comfy_boot.py > comfy-boot-check.txt
           docker image inspect "$image" --format 'Expanded image bytes: {{.Size}}' > image-size.txt
           docker run --rm --network none --entrypoint /bin/bash "$image" -lc \
             'for path in /usr/local/lib /usr/local/cuda /opt/comfyui-baked /opt/h3-service; do if [ -d "$path" ]; then du -x -h "$path"; fi; done | sort -h | tail -40' >> image-size.txt
@@ -94,4 +97,5 @@ jobs:
             image-size.txt
             node-check.txt
             ssh-check.txt
+            comfy-boot-check.txt
           retention-days: 7

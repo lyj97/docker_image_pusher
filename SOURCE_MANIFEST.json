@@ -1,11 +1,11 @@
 {
-  "source_revision": "3bff822dde23a4ef07ab3e22f9e80c98a05b295f",
+  "source_revision": "ec551f309a80d05c7546b8e17c03779919580d52",
   "files": {
     ".dockerignore": "b21c009d5761e484251601bfa0594cdb5495053ee5774dc043ed3c7caaac3617",
     "burst/h3burst/__init__.py": "ace3344a2b9201fd507b2a2b3bed7ae266dce9f7d6d7e9496736be916d58df37",
     "burst/h3burst/acceptance.py": "d20826c7b2ed706ba459841f495997fd37fb6292dcbd78bf76c8dffc752ae34a",
     "burst/h3burst/control.py": "6552c3afdb59dcf1cd7a8794fd00122026155f8dce11aae1ae0d25928626aec6",
-    "burst/h3burst/engine.py": "c3db29e507392c249fcd7e1eec1ac4e69142e5ca150b4c146e6d8a597db31c49",
+    "burst/h3burst/engine.py": "6fce980b0f32abab4e6dbae7c07d42543808e745993976edaaa1abe414411cee",
     "burst/h3burst/executor.py": "ddbe82a1b33aabc6ede215542ca7325285961ccd64fec6071bb7808921580912",
     "burst/h3burst/inputs.py": "c115644bdbb8a394666c866c20f39a1d49358825ea1a192ac6c67ed1352112c6",
     "burst/h3burst/media.py": "67c87407087f306acc186254c077def9d22738949d1e9f05d4fb31587f26d295",
@@ -52,6 +52,7 @@
     "deploy/runpod/Dockerfile": "0eed360a7e4b67387854f9fe5df843c0820670774223bf7747b265dfea324f57",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
     "deploy/runpod/build_nodes.py": "217495860f3282e69fba69d8c60fb95c1915e110abceec0338d0f2189c878277",
+    "deploy/runpod/check_comfy_boot.py": "e5572597cec360ff1c3d7c32095e17bc5f9d7873e52f8d9607fd2651866e983b",
     "deploy/runpod/check_image.py": "0101680251cef743c9f6e84d68db076552f86421aa3e6c79eca9eade515f9806",
     "deploy/runpod/check_ssh.py": "c6c302d9d32d11b0a4c77cb6254412db1beca8711a56200ae0f03f47016d1076",
     "deploy/runpod/start-ssh.sh": "fa767e1789c6bfd996b8dff81a6c7e6f034300cf65e8992130dc338f08c3f60e",
