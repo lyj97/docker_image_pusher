@@ -162,7 +162,14 @@ class Controller:
             and not self.journal.conn.execute('SELECT 1 FROM claim_requests WHERE resolved_attempt_id IS NULL LIMIT 1').fetchone()
             and not any(not json.loads(r['engine_state']).get('terminal') for r in rows))
 
-    def abort_test(self):
+    def request_stop(self, now):
+        # Persist before the request so a lost reply cannot cause a tight retry loop.
+        try:
+            self.save('stop_requested_at', now)
+        finally:
+            self.provider.stop(self.binding['pod_id'])
+
+    def abort_test(self, now=None):
         """Explicit test policy: bounded evidence then stop even during preparation."""
         try:
             try:
@@ -182,7 +189,7 @@ class Controller:
                 except Exception:
                     pass
         finally:
-            self.provider.stop(self.binding['pod_id'])
+            self.request_stop(time.time() if now is None else now)
         return {'state':'STOPPING', 'reason':'test_error', 'provider_confirmed':False}
 
     def tick(self, now=None):
@@ -212,15 +219,18 @@ class Controller:
             return {'state': 'RECONCILING', 'automatic_start': False}
         if self.binding.get('stop_on_error') is True:
             if phase == 'STOPPING':
-                # No repeated mutation while the provider is still stopping.
+                if now - (self.read('stop_requested_at') or 0) >= 60:
+                    self.request_stop(now)
                 return {'state':'STOPPING', 'provider_confirmed':False}
             try:
                 view = self.remote.json('/v1/status')
             except RemoteError:
-                return self.abort_test()
+                return self.abort_test(now)
             if view.get('stop_required') is True:
-                return self.abort_test()
+                return self.abort_test(now)
         if phase == 'STOPPING':
+            if now - (self.read('stop_requested_at') or 0) < 60:
+                return {'state': 'STOPPING', 'provider_confirmed': False}
             # Lost reply: provider GET and fresh drain proof before another stop.
             self.h3.drain()
             view = self.remote.json('/v1/status')
@@ -228,7 +238,7 @@ class Controller:
                     and view.get('active_executions') == 0 and view.get('queue_empty') is True
                     and view.get('preparing') is False):
                 return {'state': 'STOPPING', 'reason': 'renewed_stop_proof_required'}
-            self.provider.stop(self.binding['pod_id'])
+            self.request_stop(now)
             return {'state': 'STOPPING'}
         if self.binding.get('stop_on_error') is not True:
             view = self.remote.json('/v1/status')
@@ -261,7 +271,7 @@ class Controller:
         atomic_json(self.root / ('diagnostics-' + self.binding['generation'] + '.json'), diagnostics)
         self.save('diagnostics_exported', hashlib.sha256(json.dumps(diagnostics, sort_keys=True).encode()).hexdigest())
         self.save('phase', 'STOPPING')  # Commit stop intent before provider mutation.
-        self.provider.stop(self.binding['pod_id'])
+        self.request_stop(now)
         return {'state': 'STOPPING', 'estimated_compute_usd': str(spent)}
 
 

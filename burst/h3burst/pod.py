@@ -95,6 +95,11 @@ class Pod:
             proof = dict(proof, ready=False)
         return proof
 
+    def stop_required(self):
+        return self.engine.failed() or (self.stop_on_task_failure and any(
+            json.loads(r[0]).get('generation') == self.generation and json.loads(r[0]).get('state') == 'failed'
+            for r in self.db.execute('SELECT record FROM execution')))
+
     def status(self):
         with self.mutex:
             # No task submission as part of readiness; only observe prior intents.
@@ -112,9 +117,7 @@ class Pod:
                 'profiles':[self.ready(p) for p in proofs],
                 'draining': self.draining, 'active_executions': len(pending),
                 'queue_empty': self.engine.empty(), 'preparing': self.engine.preparing() or self.uploads > 0,
-                'stop_required': self.engine.failed() or (self.stop_on_task_failure and any(
-                    json.loads(r[0]).get('generation') == self.generation and json.loads(r[0]).get('state') == 'failed'
-                    for r in self.db.execute('SELECT record FROM execution'))),
+                'stop_required': self.stop_required(),
                 'last_progress_at': self.engine.last_progress(),
                 'observed_at': time.time()}
 
@@ -136,7 +139,7 @@ class Pod:
             proofs = self.engine.all_evidence() if hasattr(self.engine, 'all_evidence') else [self.evidence()]
             proof = next((self.ready(p) for p in proofs if len(matches)==1 and p.get('profile_digest')==matches[0]['profile_digest']), {})
             if (len(matches) != 1 or proof.get('profile_digest') != matches[0]['profile_digest']
-                    or proof.get('prepared') is not True or self.draining):
+                    or proof.get('prepared') is not True or self.draining or self.stop_required()):
                 raise Refused('profile_not_prepared')
             acceptance = body['acceptance']
             if acceptance and not self.acceptance_enabled:
@@ -180,7 +183,7 @@ class Pod:
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
-            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact') if key in record}
+            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code') if key in record}
 
     def observe(self, execution):
         with self.mutex:
@@ -189,7 +192,13 @@ class Pod:
                 state, output = self.engine.observe(record['prompt_id'], record['task'])
                 if state in TERMINAL and record.get('last_observation') == state:
                     if state == 'completed':
-                        artifact = self.engine.artifact(output, record)
+                        try:
+                            artifact = self.engine.artifact(output, record)
+                        except Exception:
+                            # Completion is confirmed; invalid media is a terminal failure, not lost submission.
+                            record.update(state='failed', terminal=True, error_code='artifact_validation_failed')
+                            self.save(record)
+                            return self.public(record)
                         record['artifact'] = artifact
                         if record['acceptance']:
                             receipt = {'generation': self.generation,
