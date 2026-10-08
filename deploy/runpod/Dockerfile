@@ -1,0 +1,19 @@
+# Service-only thin execution endpoint. Models remain ephemeral startup downloads.
+FROM ghcr.io/lyj97/h3-comfy@sha256:1d9fddcced68175f6f0fd28371623a71bc9cad40cad8156e267e03c27062a22d
+COPY shared/*.py /opt/h3-service/shared/
+COPY shared/execution_profiles/*.json /opt/h3-service/shared/execution_profiles/
+COPY client/h3worker/*.py /opt/h3-service/client/h3worker/
+COPY client/vace_smoke.py client/vace_reconcile.py /opt/h3-service/client/
+COPY burst/h3burst /opt/h3-service/burst/h3burst
+COPY deploy/runpod/check_image.py /opt/h3-service/check_image.py
+RUN python3 -m pip install --no-cache-dir starlette==1.6.0 uvicorn==0.52.4 && python3 -m pip check
+ENV PYTHONPATH=/opt/h3-service:/opt/h3-service/client:/opt/h3-service/burst \
+    PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 H3POD_ACCEPTANCE_ENABLED=0 \
+    H3POD_BAKED_NODES_REQUIRED=1
+# Fixed node source and dependency checks belong in CI, before GPU rental.
+RUN python3 -B -c 'import json; from shared.execution import profiles; nodes={n["name"]:n for p in profiles() for n in p["nodes"]["nodes"]}; open("/opt/h3-nodes.json","w").write(json.dumps({"schema_version":1,"nodes":list(nodes.values())}))' \
+    && python3 -B -m h3burst.prepare --manifest /opt/h3-nodes.json \
+       --comfy-root /opt/comfyui-baked --state /opt/h3-node-preparation
+EXPOSE 8190
+ENTRYPOINT ["python3", "-B", "-m", "h3burst.engine"]
+CMD []
