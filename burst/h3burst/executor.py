@@ -216,6 +216,10 @@ class CloudExecutor(Worker):
             'execution_profile_digest':profile['profile_digest'],
             'precision':profile.get('precision', 'H3 INT8 / Qwen NVFP4 AWQ / Turbo BF16'),
             'engine_prompt_id':result['prompt_id'], 'remote_graph_digest':result['workflow_digest']}
+        if task.get('mode') in ('t2va','fl2va','ref2va','a2va'):
+            # CUDA profiles do not implement the Mac optimization contract,
+            # even when an explicit render size equals the output dimensions.
+            metadata.update(optimization_capabilities=[], optimization_contract_revision=None)
         if profile['backend']=='audio_cuda':
             from shared.cuda_audio import differences
             metadata.update(engine=profile['audio_runtime']+'-cuda', engine_version=profile['upstream']['commit'],
