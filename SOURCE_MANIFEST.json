@@ -3,18 +3,19 @@
     ".dockerignore": "b21c009d5761e484251601bfa0594cdb5495053ee5774dc043ed3c7caaac3617",
     "burst/h3burst/__init__.py": "ace3344a2b9201fd507b2a2b3bed7ae266dce9f7d6d7e9496736be916d58df37",
     "burst/h3burst/acceptance.py": "788b58d3840007fec4e5dceb3eaa906cb05f0857146079a1fc6470c505be81d5",
-    "burst/h3burst/control.py": "85f02a7d7c075e64f1f4dd4aa7a3e2c8656a909a4182ecd6c5ab00759ade90bb",
+    "burst/h3burst/control.py": "0d368c0a353fa5c6b5ce4da754333caff452ccc61ea6e8151c73a94256195fd1",
     "burst/h3burst/engine.py": "0344eb250857b9b318c3a59af1658e0d20ad90276e9c9e98ef07749fc9dbe6a7",
-    "burst/h3burst/executor.py": "6c1fadf375d13dcb28875c168efdc47e4b3a7e42cf52c4228710442251a320e7",
+    "burst/h3burst/executor.py": "14199e2ea85041612c4be14265bec79130fec1c4d83b7c5dfb0c524f41d3f5a6",
+    "burst/h3burst/failure.py": "577c33e2fbc018a783d2a3ab0580580088ea08d15eb4b2f9be85edb3fed2f910",
     "burst/h3burst/inputs.py": "1929a627e259af55735008c5a5c8a565ce678ec0b5da876d722ce0773694c740",
     "burst/h3burst/media.py": "cfa9a6bca9fa8aceb564bfa6f7e3db59af4d3d52e44ce27000ea670c87e2a9ab",
     "burst/h3burst/observe.py": "a5b72f0aed73a7acfd2cee5c1463a6f8073d6ee1265bd4cbd5e44b6397b79d78",
-    "burst/h3burst/pod.py": "78120fb4d70221a53e074827ef6d773ca44211c7281c8c2fb432b3179a079d59",
+    "burst/h3burst/pod.py": "ec52016187f1b0505281a61d25834d1efa5c14eb32fdc0b08919375e728281d3",
     "burst/h3burst/policy.py": "4a659e3d833c04287c094f3a215bb3b6c4e3a4aa6de0b60b3670fe6b4bb80959",
     "burst/h3burst/prepare.py": "39cc3e134a3684a39b406d73bbcf7b827e98c01e096d868a6783a06ccb8b528e",
-    "burst/h3burst/remote_runner.py": "d03041563ed082a180a6a1ce0cf826a46bef15b3c78123cc862d7af63e2790eb",
+    "burst/h3burst/remote_runner.py": "06c78003ad31245b5407f3cc0da13fb80e7ae5cc8f758bed6619c3a1b7692c5a",
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
-    "burst/h3burst/transport.py": "49311c9a2263df96d3b8be9756d1d487bf1dadf82bab4749cad59cd4a98ed0c1",
+    "burst/h3burst/transport.py": "123cadacb0c5aeaaeb993e3ed42eaa2192645450960a5282ba4b25ddf938eced",
     "burst/h3burst/wait_capacity.py": "c0208c76018203140417acb0739b78e9fc0355d7dee3623ad8d88e9fc07f7747",
     "client/h3worker/__init__.py": "48b5b19170bab9a8c726205d3ddb20ddebbcb7a6fcb9dbab2bd9507d87efe34b",
     "client/h3worker/__main__.py": "5d86534aa1471428397102d0b8397c3d3d3a21790d7baeb13acb8c0836430e4c",
@@ -71,5 +72,5 @@
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5"
   },
-  "source_revision": "e51082ae28cf57e82e6dd00de04e1b40c0f44637"
+  "source_revision": "e940b0bbe14daf872bfa37165af196bfda059355"
 }

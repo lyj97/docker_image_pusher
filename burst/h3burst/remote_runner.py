@@ -6,7 +6,7 @@ from pathlib import Path
 
 from shared.execution import admitted_profiles, digest, task_references
 from h3worker import comfy_runner as local
-from h3worker.worker import NativeGroupUnproven, CancelRequested, _shutdown_requested
+from h3worker.worker import NativeGroupUnproven, CancelRequested, LeaseLost, _shutdown_requested
 from .transport import RemoteError
 
 CAPABILITY, MODE = local.CAPABILITY, local.MODE
@@ -113,7 +113,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
             view = None  # Lost response: GET only, never repeat POST.
         if view is not None:
             apply_observation(worker, attempt_id, state, view)
-    phase = None
+    phase, observation_failures = None, 0
     try:
         while True:
             worker._check_lease_alive()
@@ -122,13 +122,27 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
             try:
                 view = await asyncio.to_thread(remote.json, '/v1/executions/' + attempt_id)
                 apply_observation(worker, attempt_id, state, view)
+                observation_failures = 0
+                if state.pop('observation_error', None) is not None:
+                    persist(worker, attempt_id, state)
             except RemoteError as exc:
                 if exc.code == 'execution_not_found':
                     # This boot never committed an intent, so it could not POST to Comfy.
                     state.update(terminal=True, status='failed')
                     persist(worker, attempt_id, state)
                     return False, {'code': 'ENGINE_FAILED', 'message': 'remote intent was not accepted'}
-                unresolved(worker, 'remote execution unobservable; retaining recovery intent')
+                code = exc.code if isinstance(exc.code, str) and re.fullmatch('[a-z][a-z0-9_]{0,63}', exc.code) else 'remote_error'
+                status = exc.status if type(exc.status) is int and 0 <= exc.status <= 599 else 0
+                state['observation_error'] = {'operation': 'get_execution', 'code': code, 'status': status}
+                persist(worker, attempt_id, state)
+                observation_failures += 1
+                print(f'[cloud] {attempt_id} GET observation: {code}, HTTP {status}, failure {observation_failures}', flush=True)
+                if (code in ('pod_unreachable', 'pod_observation_unavailable')
+                        or status in (502, 503, 504)) and observation_failures < 3:
+                    # Re-read the same intent; a missing observation is not a failed inference.
+                    await asyncio.sleep(2 * observation_failures)
+                    continue
+                unresolved(worker, f'remote observation unavailable ({code}, HTTP {status}); retaining recovery intent')
             if state.get('terminal'):
                 if state['status'] != 'completed':
                     return False, {'code': 'ENGINE_FAILED', 'message': 'remote ' + state['status']}
@@ -153,13 +167,16 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 await worker._flush_events_safe(attempt_id, lease_token)
                 phase = next_phase
             await asyncio.sleep(2)
-    finally:
+    except (CancelRequested, LeaseLost):
         if not state.get('terminal'):
+            state['cancel_requested'] = True
+            persist(worker, attempt_id, state)
             try:
                 view = await asyncio.to_thread(remote.json, '/v1/executions/' + attempt_id + '/cancel', {})
                 apply_observation(worker, attempt_id, state, view)
             except (RemoteError, NativeGroupUnproven):
                 quarantine(worker, 'remote cancellation unresolved; reconciliation required')
+        raise
 
 
 async def recover_orphans(worker):

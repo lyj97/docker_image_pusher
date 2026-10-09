@@ -2,6 +2,7 @@
 import asyncio
 import argparse
 import json
+import importlib
 import os
 from pathlib import Path
 import subprocess
@@ -13,12 +14,16 @@ from h3worker.worker import Worker
 from shared.execution import profiles, claimable_profiles
 from . import remote_runner
 from .transport import Transport, RemoteError
+from .failure import SCHEMA, read_failure
 
 
 class CloudExecutor(Worker):
-    def __init__(self, config, remote, approved_profiles, *, first_task_validation=False):
+    def __init__(self, config, remote, approved_profiles, *, first_task_validation=False, stop_on_error=False):
         if type(first_task_validation) is not bool:
             raise ValueError('first task validation must be an explicit boolean')
+        if type(stop_on_error) is not bool:
+            raise ValueError("stop_on_error must be an explicit boolean")
+        self.stop_on_error = stop_on_error
         self.first_task_validation = first_task_validation
         if (config.fake_runner or config.cpu_tail_overlap or config.cpu_tail_pilot
                 or config.comfyui_preview_enabled):
@@ -33,6 +38,9 @@ class CloudExecutor(Worker):
         self.remote, self.approved_profiles = remote, tuple(approved_profiles)
         self._comfy_adapter = remote_runner
         self.remote_ready, self.remote_status = False, {}
+        with self.journal.conn:self.journal.conn.execute(SCHEMA)
+        self.test_failure = read_failure(self.journal, remote.generation) if stop_on_error else None
+        if self.test_failure:self._drain = True
         from h3worker.monitor import Monitor
         owner = self
         class CloudMonitor(Monitor):
@@ -41,13 +49,40 @@ class CloudExecutor(Worker):
                 rows = owner.journal.conn.execute('SELECT engine_state FROM attempts WHERE engine_state IS NOT NULL').fetchall()
                 unresolved = sum(not json.loads(r['engine_state']).get('terminal') for r in rows)
                 result['status_report']['cloud_safety'] = {
-                    'generation': owner.remote.generation, 'unresolved_executions': unresolved,
+                    'generation': owner.remote.generation, 'test_failure': owner.test_failure,
+                    'unresolved_executions': unresolved,
                     'local_idle': not owner.journal.active_attempts() and unresolved == 0
                         and not owner.journal.conn.execute('SELECT 1 FROM claim_requests WHERE resolved_attempt_id IS NULL LIMIT 1').fetchone()}
                 return result
         self.monitor = CloudMonitor(self.journal, config.worker_id, self.boot_id)
 
+    def _latch_test_failure(self, attempt_id, category):
+        if not self.stop_on_error:return
+        self._drain, self.remote_ready = True, False
+        self.test_failure = {'attempt_id': attempt_id, 'category': category}
+        with self.journal.conn:
+            self.journal.conn.execute('INSERT OR IGNORE INTO cloud_test_failures VALUES (?,?,?)',
+                (self.remote.generation, attempt_id, category))
+        self.test_failure = read_failure(self.journal, self.remote.generation)
+
+    async def _finish_failed(self, attempt_id, *args, **kwargs):
+        self._latch_test_failure(attempt_id, 'attempt_failed')
+        await super()._finish_failed(attempt_id, *args, **kwargs)
+
+    def _defer_recovery(self, attempt_id, reason='contact unavailable'):
+        self._latch_test_failure(attempt_id, 'recovery_deferred')
+        super()._defer_recovery(attempt_id, reason)
+
+    def _quarantine_attempt(self, attempt_id, reason):
+        self._latch_test_failure(attempt_id, 'attempt_quarantined')
+        super()._quarantine_attempt(attempt_id, reason)
+
+    async def _release_or_fail(self, attempt_id, *args, **kwargs):
+        self._latch_test_failure(attempt_id, 'local_incapacity')
+        await super()._release_or_fail(attempt_id, *args, **kwargs)
+
     async def _capability_snapshot(self, comfy_ready):
+        if self.test_failure:self.remote_ready = False
         proofs = self.remote_status.get('profiles', [self.remote_status.get('profile', {})])
         proofs = [dict(p, generation=self.remote.generation) for p in proofs
                   if isinstance(p, dict) and (p.get('ready') is True or
@@ -59,7 +94,8 @@ class CloudExecutor(Worker):
             'execution_profiles':proofs if self.remote_ready else [],
             'cloud_state':{'ready':any(p.get('ready') is True for p in proofs),
                 'can_execute':self.remote_ready, 'preparing':self.remote_status.get('preparing',False),
-                'stop_required':self.remote_status.get('stop_required',False)}}
+                'stop_required':bool(self.test_failure) or self.remote_status.get('stop_required',False),
+                'test_failure':self.test_failure}}
         from types import SimpleNamespace
         config = SimpleNamespace(runpod_execution_enabled=True,
             runpod_first_task_validation=getattr(self, 'first_task_validation', False),
@@ -117,7 +153,7 @@ class CloudExecutor(Worker):
                     p.get('prepared') is True
                     for p in self.remote_status.get('profiles', [self.remote_status.get('profile', {})]))
                 and not self.remote_status.get('draining') and not self.remote_status.get('stop_required')
-                and not self._unhealthy_reason)
+                and not self._unhealthy_reason and not self.test_failure)
         except (RemoteError, AttributeError, TypeError, ValueError):
             self.remote_ready, self.remote_status = False, {}
         # Always re-register the current evidence, preventing stale readiness.
@@ -179,6 +215,9 @@ class CloudExecutor(Worker):
 
 def check_config(worker):
     """Explicit preboot deployment check; never registers, claims or contacts a Pod."""
+    # Material transfer imports are lazy during execution; check them before boot.
+    importlib.import_module("h3burst.inputs")
+    importlib.import_module("h3burst.media")
     cfg = worker.config
     if cfg.worker_token == 'worker-token':
         raise ValueError('existing H3 Worker credential required')
@@ -216,7 +255,8 @@ def main():
         raise ValueError('binding identity and absolute persistent data dir required')
     remote = Transport(binding['pod_url'], os.environ['H3BURST_POD_TOKEN'], binding['generation'])
     worker = CloudExecutor(cfg, remote, binding['approved_profiles'],
-                           first_task_validation=binding.get('first_task_validation', False))
+                           first_task_validation=binding.get('first_task_validation', False),
+                           stop_on_error=binding.get('stop_on_error', False))
     if args.check_config:
         try:
             print(json.dumps(check_config(worker)))

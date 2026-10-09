@@ -20,6 +20,7 @@ import urllib.parse
 
 from .transport import Transport, NoRedirect, RemoteError, MAX_JSON
 from .prepare import atomic_json
+from .failure import read_failure
 
 
 class Provider:
@@ -222,6 +223,8 @@ class Controller:
                 if now - (self.read('stop_requested_at') or 0) >= 60:
                     self.request_stop(now)
                 return {'state':'STOPPING', 'provider_confirmed':False}
+            if read_failure(self.journal, self.binding['generation']):
+                return self.abort_test(now)
             try:
                 view = self.remote.json('/v1/status')
             except RemoteError:

@@ -1,5 +1,6 @@
 """Bounded, authenticated Pod transport. No redirects, proxies or POST retries."""
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -56,20 +57,27 @@ class Transport:
             return self.opener.open(req, timeout=self.timeout)
         except urllib.error.HTTPError as exc:
             status = exc.code
-            raw = exc.read(MAX_JSON + 1)
-            exc.close()
+            try:
+                raw = exc.read(MAX_JSON + 1)
+            except (OSError, urllib.error.URLError, http.client.HTTPException):
+                raise RemoteError('pod_unreachable') from None
+            finally:
+                exc.close()
             try:
                 error = json.loads(raw) if len(raw) <= MAX_JSON else {}
             except ValueError:
                 error = {}
             code = error.get('error') if isinstance(error, dict) and error.get('generation') == self.generation else None
             raise RemoteError(code or 'pod_http_' + str(status), status) from None
-        except (OSError, urllib.error.URLError):
+        except (OSError, urllib.error.URLError, http.client.HTTPException):
             raise RemoteError('pod_unreachable') from None
 
     def json(self, path, body=None):
-        with self.request(path, body) as response:
-            raw = response.read(MAX_JSON + 1)
+        try:
+            with self.request(path, body) as response:
+                raw = response.read(MAX_JSON + 1)
+        except (OSError, urllib.error.URLError, http.client.HTTPException):
+            raise RemoteError('pod_unreachable') from None
         if len(raw) > MAX_JSON:
             raise RemoteError('response_too_large')
         try:

@@ -53,6 +53,7 @@ class Pod:
         self.acceptance_enabled = acceptance_enabled
         self.stop_on_task_failure = stop_on_task_failure
         self.mutex = threading.RLock()
+        self.observation_lock = threading.Lock()
         self.draining = self.db.execute("SELECT value FROM meta WHERE key='draining'").fetchone() is not None
 
     def close(self):
@@ -75,7 +76,7 @@ class Pod:
         # Original protocol journal has no prompts, URLs, tokens or outputs.
         with (self.root / 'protocol.log').open('a') as log:
             log.write(json.dumps({key: record.get(key) for key in
-                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested')}) + '\n')
+                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error')}) + '\n')
             log.flush()
             os.fsync(log.fileno())
 
@@ -102,17 +103,13 @@ class Pod:
 
     def status(self):
         with self.mutex:
-            # No task submission as part of readiness; only observe prior intents.
-            for row in self.active():
-                if row['generation'] == self.generation:
-                    self.observe(row['execution_id'])
             pending = self.active()
             proofs = self.engine.all_evidence() if hasattr(self.engine, 'all_evidence') else [self.evidence()]
             return {'generation': self.generation, 'profile': self.ready(),
                 'acceptance_enabled': self.acceptance_enabled,
                 'profiles':[self.ready(p) for p in proofs],
                 'draining': self.draining, 'active_executions': len(pending),
-                'queue_empty': self.engine.empty(), 'preparing': self.engine.preparing() or self.uploads > 0,
+                'queue_empty': not pending and self.engine.empty(), 'preparing': self.engine.preparing() or self.uploads > 0,
                 'stop_required': self.stop_required(),
                 'last_progress_at': self.engine.last_progress(),
                 'observed_at': time.time()}
@@ -178,15 +175,44 @@ class Pod:
             'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code') if key in record}
 
     def observe(self, execution):
-        with self.mutex:
-            record = self.load(execution)
-            if record['state'] not in TERMINAL:
+        # Concurrent readers use durable state while one observer does slow Comfy I/O.
+        if not self.observation_lock.acquire(blocking=False):
+            with self.mutex:
+                record = self.load(execution)
+                if record.get('observation_error'):
+                    raise Refused('pod_observation_unavailable', 503)
+                return self.public(record)
+        try:
+            with self.mutex:
+                record = self.load(execution)
+                if record['state'] in TERMINAL:return self.public(record)
+            try:
                 state, output = self.engine.observe(record['prompt_id'], record['task'])
+            except Exception:
+                with self.mutex:
+                    record = self.load(execution)
+                    record['observation_error'] = 'comfy_observation_unavailable'
+                    self.save(record)
+                raise Refused('pod_observation_unavailable', 503) from None
+            artifact, artifact_error = None, False
+            if state == 'completed' and record.get('last_observation') == state:
+                try:artifact = self.engine.artifact(output, record)
+                except Exception:artifact_error = True
+            with self.mutex:
+                # Cancellation can update this record while Comfy/media I/O is running.
+                record = self.load(execution)
+                if record['state'] in TERMINAL:return self.public(record)
+                return self._apply_observation(record, state, artifact, artifact_error)
+        finally:
+            self.observation_lock.release()
+
+    def _apply_observation(self, record, state, artifact, artifact_error):
+        with self.mutex:
+            record.pop('observation_error', None)
+            if record['state'] not in TERMINAL:
                 if state in TERMINAL and record.get('last_observation') == state:
                     if state == 'completed':
-                        try:
-                            artifact = self.engine.artifact(output, record)
-                        except Exception:
+                        if artifact_error:
                             # Completion is confirmed; invalid media is a terminal failure, not lost submission.
                             record.update(state='failed', terminal=True, error_code='artifact_validation_failed')
                             self.save(record)
@@ -309,7 +335,10 @@ def create_app(pod, token, expires_at):
                         for record in pod.active():
                             if record['generation'] == pod.generation:
                                 await asyncio.to_thread(pod.cancel, record['execution_id'])
-                    await asyncio.to_thread(pod.status)
+                    with pod.mutex:active = pod.active()
+                    for record in active:
+                        if record['generation'] == pod.generation:
+                            await asyncio.to_thread(pod.observe, record['execution_id'])
                 except Exception:
                     pass  # Durable uncertainty stays fenced and visible to the controller.
                 await asyncio.sleep(2)
