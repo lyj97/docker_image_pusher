@@ -11,9 +11,13 @@ comfy_root=Path('/opt/comfyui-baked')
 commits={p['comfy_commit'] for p in profiles()}
 if len(commits) != 1:raise ValueError('profiles require different ComfyUI commits')
 commit=next(iter(commits))
-if subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=comfy_root,text=True).strip():
-    raise ValueError('base ComfyUI contains tracked modifications')
 subprocess.run(['git','fetch','--depth','1','origin',commit],cwd=comfy_root,check=True,timeout=180)
+# The audited base upgraded core via rsync --exclude=/.git; its index is stale.
+# Reset metadata only, preserving all files, then reject actual core differences.
+subprocess.run(['git','reset','--mixed',commit],cwd=comfy_root,check=True,timeout=180)
+paths=['.', ':(exclude)custom_nodes', ':(exclude)models', ':(exclude)input',
+       ':(exclude)output', ':(exclude)user', ':(exclude)temp']
+subprocess.run(['git','diff','--exit-code',commit,'--',*paths],cwd=comfy_root,check=True,timeout=180)
 subprocess.run(['git','checkout','--detach',commit],cwd=comfy_root,check=True,timeout=180)
 
 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}

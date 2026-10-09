@@ -52,7 +52,7 @@
     "client/vace_smoke.py": "c0fd0a7f5936507cf6edd46735358b32075d0b168b4ad23554daa931cb7109a0",
     "deploy/runpod/Dockerfile": "038d5e75c5b8293dc64de4978fa253a7242fb9266b2eb4308c061c9edbe713bf",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
-    "deploy/runpod/build_nodes.py": "ba82c822904a2840a45b01f5a4e864a5da2d4e87e3c454d7bf054cf7e4cf3ec6",
+    "deploy/runpod/build_nodes.py": "7a2558f68e09db10ec58fe84a892b24300310feed387554d0a39807badf20b9f",
     "deploy/runpod/check_comfy_boot.py": "c67bbb7cd371c11f2d825664e48fa9b1789e2195979053863521e9e34f5a1f6e",
     "deploy/runpod/check_image.py": "802c02a669742b4211b980d03246b561c236796a1a4e5414d71eda6803e4ca91",
     "deploy/runpod/check_ssh.py": "c6c302d9d32d11b0a4c77cb6254412db1beca8711a56200ae0f03f47016d1076",
@@ -74,5 +74,5 @@
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5",
     "shared/runpod_media.py": "0882cb3065017d2ba69ae7ed498e5aeb64915e432015474a33c7b7aa49c10287"
   },
-  "source_revision": "7b90620bc15281760ec4347d9032610d5a9a3b8a"
+  "source_revision": "56de6e7657497f2b4a717af32b1a2a539428b914"
 }
