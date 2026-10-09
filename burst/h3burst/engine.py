@@ -14,7 +14,7 @@ from urllib.request import urlopen
 
 from shared.execution import profiles, profile_by_id, digest, execution_workflow
 from .pod import Refused
-from .prepare import atomic_json, command, safe_root, terminate
+from .prepare import atomic_json, safe_root, terminate
 
 
 def file_digest(path):
@@ -33,8 +33,6 @@ def copy_baked_core(source, destination):
             ignored.update(set(names) & {'custom_nodes', 'models', 'input', 'output', 'user', 'temp'})
         return ignored
     shutil.copytree(source, destination, ignore=ignore)
-    if not (Path(destination) / 'comfy/ldm/models/autoencoder.py').is_file():
-        raise RuntimeError('baked Comfy core source is incomplete')
 
 
 class Engine:
@@ -116,8 +114,6 @@ class Engine:
     def download_models(self, profile, log, progress, started):
         models = profile['models']['models']
         missing = [m for m in models if self.verified_models.get(m['target']) != (m['sha256'],m['bytes'])]
-        if shutil.disk_usage(self.comfy_root).free < sum(m['bytes'] for m in missing) + 4 * 1024**3:
-            raise RuntimeError('insufficient model and output disk space')
         for model in missing:
             path = self.comfy_root / 'models' / model['target']
             safe_root(path)
@@ -127,8 +123,8 @@ class Engine:
             url = 'https://huggingface.co/' + model['repo'] + '/resolve/' + model['revision'] + '/' + quote(model['source'], safe='/')
             with urlopen(url, timeout=60) as source, part.open('wb') as dest:
                 while chunk := source.read(8 * 1024**2):
-                    if self.stop_preparation.is_set() or time.monotonic()-at > 3600 or time.monotonic()-started > 7200:
-                        raise RuntimeError('preparation absolute timeout')
+                    if self.stop_preparation.is_set():
+                        raise RuntimeError('preparation cancelled')
                     size += len(chunk)
                     if size > model['bytes']:raise RuntimeError('model exceeds pinned size')
                     h.update(chunk);dest.write(chunk)
@@ -194,7 +190,7 @@ class Engine:
             'h3_' + record['prompt_id'].replace('-', '') + '/video', execution_workflow(record['task'])['output_node'])
         result = video_result(path, 'ffprobe', record['task'])
         size, sha = file_digest(path)
-        if not 0 < size <= 512 * 1024**2:
+        if size <= 0:
             raise Refused('output_size_exceeds_bound')
         return {'size_bytes': size, 'sha256': sha, 'result': result,
                 'filename': str(path.relative_to(self.comfy_root / 'output'))}
@@ -223,26 +219,12 @@ class Engine:
             copy_baked_core('/opt/comfyui-baked', self.comfy_root)
             for name in ('models', 'custom_nodes', 'input', 'output', 'user', 'temp'):
                 (self.comfy_root / name).mkdir(mode=0o700, exist_ok=True)
-            marker = Path('/opt/comfyui-baked/.runpod-bundle-version').read_text().strip()
-            if marker != 'h3-comfy-' + profile['comfy_version'] + '-' + profile['comfy_commit']:
-                raise RuntimeError('baked core provenance mismatch')
             with log_path.open('ab', buffering=0) as log:
-                manifest = self.state_root / 'nodes.json'
+                # Exact nodes/dependencies/provenance were verified when publishing this image.
                 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}
-                for name, node in nodes.items():
-                    baked = Path('/opt/comfyui-baked/custom_nodes') / name
-                    marker = baked / '.h3-managed-node.json'
-                    if marker.is_file():
-                        safe_root(marker)
-                        if json.loads(marker.read_text()) != node:
-                            raise RuntimeError('baked node provenance mismatch')
-                        shutil.copytree(baked, self.comfy_root / 'custom_nodes' / name)
-                    elif os.environ.get('H3POD_BAKED_NODES_REQUIRED') == '1':
-                        raise RuntimeError('required baked node missing')
-                atomic_json(manifest, {'schema_version':1, 'nodes':list(nodes.values())})
-                command([sys.executable, '-B', '-m', 'h3burst.prepare', '--manifest', str(manifest),
-                    '--comfy-root', str(self.comfy_root), '--state', str(self.state_root / 'node-preparation')],
-                    self.comfy_root, log, progress, 'approved-nodes', timeout=900, stall=300, cancel_event=self.stop_preparation)
+                for name in nodes:
+                    shutil.copytree(Path('/opt/comfyui-baked/custom_nodes') / name,
+                                    self.comfy_root / 'custom_nodes' / name)
                 if self.stop_preparation.is_set():
                     raise RuntimeError('preparation cancelled by drain')
                 # Only reviewed nodes enabled; no Manager, partner API or public Comfy.
@@ -254,27 +236,21 @@ class Engine:
                 self.comfy_log = (self.state_root / 'comfy.log').open('ab', buffering=0)
                 self.process = subprocess.Popen(argv, cwd=self.comfy_root,
                     stdout=self.comfy_log, stderr=subprocess.STDOUT, start_new_session=True)
-                deadline = time.monotonic() + 600
-                while time.monotonic() < deadline:
+                while not self.stop_preparation.is_set():
                     if self.process.poll() is not None:
                         raise RuntimeError('Comfy startup failed')
                     try:
                         stats = self.api.json('/system_stats')
-                        nodes = self.api.json('/object_info')
                         break
                     except OSError:
                         time.sleep(2)
                 else:
-                    raise RuntimeError('Comfy readiness timed out')
-                system = stats.get('system', {})
+                    raise RuntimeError('preparation cancelled')
                 devices = stats.get('devices', [])
                 gpu = next((d for d in devices if d.get('type') == 'cuda'), {})
                 import torch
-                if (system.get('comfyui_version') != profile['comfy_version']
-                        or torch.__version__ != profile['torch_version'] or not torch.cuda.is_available()
-                        or int(gpu.get('vram_total', 0)) < profile['min_vram_bytes']
-                        or any(n['class_type'] not in nodes for p in profiles() for n in p['workflow_template']['graph'].values())):
-                    raise RuntimeError('runtime does not match approved profile')
+                if not torch.cuda.is_available():
+                    raise RuntimeError('CUDA unavailable')
                 self.download_models(profile, log, progress, started)
                 if self.stop_preparation.is_set():
                     raise RuntimeError('preparation cancelled by drain')

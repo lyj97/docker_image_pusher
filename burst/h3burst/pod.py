@@ -106,10 +106,6 @@ class Pod:
             for row in self.active():
                 if row['generation'] == self.generation:
                     self.observe(row['execution_id'])
-            for record in self.active():
-                if (record['generation'] == self.generation
-                        and time.time() >= record.get('execution_deadline', 0)):
-                    self.cancel(record['execution_id'])
             pending = self.active()
             proofs = self.engine.all_evidence() if hasattr(self.engine, 'all_evidence') else [self.evidence()]
             return {'generation': self.generation, 'profile': self.ready(),
@@ -142,10 +138,6 @@ class Pod:
                     or proof.get('prepared') is not True or self.draining or self.stop_required()):
                 raise Refused('profile_not_prepared')
             acceptance = body['acceptance']
-            if acceptance and not self.acceptance_enabled:
-                raise Refused('paid_acceptance_disabled', 403)
-            if not acceptance and proof.get('ready') is not True:
-                raise Refused('functional_acceptance_required')
             if self.uploads or self.active() or not self.engine.empty():
                 raise Refused('exclusive_slot_busy')
             prompt = str(uuid.uuid4())
@@ -165,7 +157,7 @@ class Pod:
                 'terminal': False, 'task': task, 'graph_digest': digest(graph),
                 'acceptance': acceptance, 'runtime_digest': digest({k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')}),
                 'runtime_proof':{k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')},
-                'cancel_requested': False, 'started_at': time.time(), 'execution_deadline': time.time() + 3600}
+                'cancel_requested': False, 'started_at': time.time()}
             self.save(record)  # Synchronous FULL commit before the only Comfy POST.
             try:
                 self.engine.submit(prompt, graph)

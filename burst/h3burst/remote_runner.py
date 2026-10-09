@@ -72,7 +72,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
     validated = any(p.get('profile_digest') == profile['profile_digest'] and p.get('ready') is True
         for p in worker.remote_status.get('profiles', [worker.remote_status.get('profile', {})]))
     body = {'execution_id': attempt_id, 'task': task,
-            'acceptance': worker.first_task_validation and not validated}
+            'acceptance': not validated}
     if state and not state.get('terminal') and confirmed_stopped(worker, state):
         state.update(terminal=True, status='failed')
         persist(worker, attempt_id, state)
@@ -135,8 +135,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 artifact = view['artifact']
                 dest = Path(worker.config.attempt_dir(attempt_id)) / 'result.mp4'
                 await asyncio.to_thread(remote.download, '/v1/executions/' + attempt_id + '/artifact',
-                    dest, artifact['size_bytes'], artifact['sha256'], worker._transfer_should_abort,
-                    worker.config.max_asset_bytes)
+                    dest, artifact['size_bytes'], artifact['sha256'], worker._transfer_should_abort)
                 if task.get('mode') == 'a2va':
                     from .media import original_soundtrack
                     await asyncio.to_thread(original_soundtrack, dest, local_inputs['ref:' + task['references'][0]['asset_id']], task, worker.config)

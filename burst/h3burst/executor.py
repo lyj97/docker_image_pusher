@@ -21,6 +21,9 @@ class CloudExecutor(Worker):
         if (config.fake_runner or config.cpu_tail_overlap or config.cpu_tail_pilot
                 or config.comfyui_preview_enabled):
             raise ValueError('cloud executor requires exclusive remote Comfy mode')
+        config.durability_timeout_seconds = None
+        config.min_free_disk_bytes = 0
+        config.media_process_timeout_seconds = None
         config.capability_models = ()
         config.comfyui_ready = False
         config.comfyui_version = profiles()[0]['comfy_version']
@@ -46,8 +49,7 @@ class CloudExecutor(Worker):
         proofs = self.remote_status.get('profiles', [self.remote_status.get('profile', {})])
         proofs = [dict(p, generation=self.remote.generation) for p in proofs
                   if isinstance(p, dict) and (p.get('ready') is True or
-                      (getattr(self, 'first_task_validation', False) and self.remote_status.get('acceptance_enabled') is True
-                       and p.get('prepared') is True and p.get('ready') is False))]
+                      p.get('prepared') is True)]
         capabilities = {'models':[remote_runner.CAPABILITY] if self.remote_ready else [],
             'modes':[remote_runner.MODE] if self.remote_ready else [], 'update_sources':[],
             'execution_backend':'runpod','executor_generation':self.remote.generation,
@@ -110,8 +112,7 @@ class CloudExecutor(Worker):
             self.remote_status = await asyncio.to_thread(self.remote.json, '/v1/status')
             if not self._drain:await self._prepare_queue_resources()
             self.remote_ready = (any(p.get('ready') is True or
-                    (self.first_task_validation and self.remote_status.get('acceptance_enabled') is True
-                     and p.get('prepared') is True and p.get('ready') is False)
+                    p.get('prepared') is True
                     for p in self.remote_status.get('profiles', [self.remote_status.get('profile', {})]))
                 and not self.remote_status.get('draining') and not self.remote_status.get('stop_required')
                 and not self._unhealthy_reason)

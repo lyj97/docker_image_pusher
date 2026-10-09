@@ -83,7 +83,7 @@ _DURABILITY_SLOT = threading.BoundedSemaphore(1)
 
 async def _durable_manifest(media_path, manifest_path, attempt_dir, manifest,
                             *, check_alive, timeout_seconds):
-    if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+    if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
         raise ValueError("durability_timeout_seconds must be positive and finite")
     if not _DURABILITY_SLOT.acquire(blocking=False):
         raise RuntimeError("local output durability operation still running")
@@ -131,7 +131,7 @@ async def _durable_manifest(media_path, manifest_path, attempt_dir, manifest,
     try:
         while True:
             check_alive()
-            remaining = timeout_seconds - max(
+            remaining = 0.1 if timeout_seconds is None else timeout_seconds - max(
                 time.monotonic() - started_mono, time.time() - started_wall,
             )
             if remaining <= 0:
@@ -3188,7 +3188,8 @@ class Worker:
                 return False
             while other_tail():
                 self._check_lease_alive()
-                if time.monotonic() - start > self.config.durability_timeout_seconds:
+                if (self.config.durability_timeout_seconds is not None
+                        and time.monotonic() - start > self.config.durability_timeout_seconds):
                     raise TimeoutError('previous publication tail did not drain')
                 await asyncio.sleep(.1)
             if not cpu_overlap.enabled(self) or record['request_snapshot'].get('mode') not in cpu_overlap.NATIVE_MODES:

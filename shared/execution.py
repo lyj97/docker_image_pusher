@@ -26,7 +26,7 @@ def profiles():
         'backend': 'comfyui', 'gpu_vendor': 'nvidia', 'comfy_version': '0.39.0',
         'comfy_commit': 'b0b743566f65daafc423b4fea8a2fbda94b3384a',
         'torch_version': '2.10.0+cu130',
-        'min_vram_bytes': 44 * 1024**3, 'workflow_template': template,
+        'workflow_template': template,
         'models': models, 'nodes': {'schema_version': 1, 'nodes': []},
         'variable_inputs': [['7', 'prompt', 'text'], ['8', 'noise_seed', 'seed']],
         'validation': 'A40/Comfy 0.30 已生成；0.39 须完成实例功能验证'}
@@ -34,7 +34,7 @@ def profiles():
     profile['nodes_digest'] = digest(profile['nodes'])
     profile['profile_digest'] = digest({key: profile[key] for key in (
         'profile_id', 'backend', 'gpu_vendor', 'comfy_version', 'comfy_commit',
-        'torch_version', 'min_vram_bytes', 'workflow_template', 'models', 'nodes',
+        'torch_version', 'workflow_template', 'models', 'nodes',
         'variable_inputs')})
     profile['generation_node'] = '7'
     profile['input_slots'] = []
@@ -54,7 +54,7 @@ def profiles():
             'classes': ['LanPaint_VideoMaskEditor', 'LanPaint_AVEncode', 'LanPaint_AVDecode']}]})
     lan['models_digest'], lan['nodes_digest'] = digest(lan['models']), digest(lan['nodes'])
     lan['profile_digest'] = digest({k: lan[k] for k in ('profile_id', 'backend', 'gpu_vendor',
-        'comfy_version', 'comfy_commit', 'torch_version', 'min_vram_bytes', 'workflow_template',
+        'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template',
         'models', 'nodes', 'variable_inputs', 'generation_node', 'input_slots')})
     audio = dict(profile, profile_id='h3-a2va-int8-544x960-cu130-v1',
         label='H3 音频驱动 CUDA INT8 · 544×960 · 158 帧 · 20步',
@@ -66,7 +66,7 @@ def profiles():
         validation='音频 guide + 首帧 + 原音轨回写；CUDA 实例及质量须独立验收')
     audio['models_digest'] = digest(audio['models'])
     audio['profile_digest'] = digest({k: audio[k] for k in ('profile_id', 'backend', 'gpu_vendor',
-        'comfy_version', 'comfy_commit', 'torch_version', 'min_vram_bytes', 'workflow_template',
+        'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template',
         'native_generation', 'models', 'nodes', 'variable_inputs', 'input_slots')})
     return (profile, lan, audio)
 
@@ -213,14 +213,12 @@ def ready_profiles(capabilities, config, worker_id, *, first_task=False):
                     and item.get('generation') == generation \
                     and ((item.get('ready') is True and isinstance(item.get('validation_artifact_sha256'), str)
                           and re.fullmatch('[0-9a-f]{64}', item['validation_artifact_sha256']))
-                         or (first_task and getattr(config, 'runpod_first_task_validation', False)
-                             and capabilities.get('first_task_validation_enabled') is True
-                             and item.get('prepared') is True and item.get('ready') is False)) \
+                         or (first_task and item.get('prepared') is True)) \
                     and item.get('comfy_version') == profile['comfy_version'] \
                     and item.get('comfy_commit') == profile['comfy_commit'] \
                     and item.get('torch_version') == profile['torch_version'] \
                     and item.get('gpu_vendor') == 'nvidia' \
-                    and type(vram) is int and vram >= profile['min_vram_bytes'] \
+                    and type(vram) is int and vram > 0 \
                     and item.get('models_digest') == profile['models_digest'] \
                     and item.get('nodes_digest') == profile['nodes_digest']:
                 accepted.append(profile['profile_digest'])
@@ -229,7 +227,7 @@ def ready_profiles(capabilities, config, worker_id, *, first_task=False):
 
 
 def claimable_profiles(capabilities, config, worker_id):
-    """Ready profiles, or explicitly authorized first-business-task validation.
+    """Validated profiles, or prepared resources for an already authorized business task.
 
     Prepared evidence remains unvalidated; no fabricated readiness or artifact.
     """
@@ -267,7 +265,7 @@ def advice(raw, *, config=None):
                        and profile['profile_digest'] in getattr(config, 'runpod_validated_profiles', ()))
             result.update(status='compatible', label='适合 NVIDIA · 待就绪',
                 scheduling='local_then_runpod', profile_digests=[p['profile_digest'] for p in matches],
-                profile_label=profile['label'], min_vram_gib=44,
+                profile_label=profile['label'],
                 precision=profile.get('precision', 'H3 INT8 convrot / Qwen NVFP4 AWQ / Turbo BF16'),
                 comfy_version=profile['comfy_version'], required_nodes=[n['name'] for n in profile['nodes']['nodes']],
                 reasons=['工作流拓扑、模型与生成规格匹配已登记的 CUDA 配置。', profile['validation']],

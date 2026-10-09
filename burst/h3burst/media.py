@@ -8,7 +8,7 @@ import subprocess
 def video_result(path, ffprobe, task):
     process = subprocess.run([ffprobe or 'ffprobe', '-v', 'error', '-count_frames',
         '-show_streams', '-show_format', '-of', 'json', str(path)],
-        capture_output=True, timeout=120, check=True)
+        capture_output=True, timeout=None, check=True)
     if len(process.stdout) > 1024 * 1024:
         raise ValueError('media probe exceeds bound')
     data = json.loads(process.stdout)
@@ -45,7 +45,7 @@ def original_soundtrack(path, source, task, config):
             '-i', str(source), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy',
             '-af', 'asetpts=PTS-STARTPTS,apad', '-t', f'{duration:.9f}', '-c:a', 'aac',
             '-b:a', '192k', '-movflags', '+faststart', str(temporary)],
-            capture_output=True, timeout=120, check=True)
+            capture_output=True, timeout=None, check=True)
         verify_a2va_mux(str(temporary), str(source), task['generation'], config)
         temporary.replace(path)
     finally:

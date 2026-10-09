@@ -112,9 +112,8 @@ class Transport:
         except (OSError, urllib.error.URLError, ValueError):
             raise RemoteError('input_upload_failed') from None
 
-    def download(self, path, destination, expected_size, expected_sha, abort=lambda: False,
-                 max_bytes=512 * 1024**2):
-        if (type(expected_size) is not int or not 0 < expected_size <= max_bytes
+    def download(self, path, destination, expected_size, expected_sha, abort=lambda: False):
+        if (type(expected_size) is not int or expected_size <= 0
                 or not isinstance(expected_sha, str) or not re.fullmatch('[0-9a-f]{64}', expected_sha)):
             raise RemoteError('invalid_artifact_descriptor')
         destination = Path(destination)

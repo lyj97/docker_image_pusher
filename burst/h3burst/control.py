@@ -253,9 +253,7 @@ class Controller:
             idle_since = now
             self.save('idle_since', None)
         stop = (phase in ('DRAINING', 'RECONCILING') or self.rate > self.cap or spent >= self.budget
-                or spent + self.cap * Decimal(600) / Decimal(3600) >= self.budget
                 or view.get('stop_required') is True
-                or (view.get('preparing') is True and now - view.get('last_progress_at', now) > 300)
                 or now - idle_since >= self.binding['idle_seconds'])
         if not stop:
             self.save('phase', 'READY' if view.get('profile', {}).get('ready') else 'PREPARING')

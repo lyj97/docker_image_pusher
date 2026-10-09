@@ -178,7 +178,7 @@ def _media_probe(path: str, config) -> Dict[str, Any]:
     probe = subprocess.run(
         [config.ffprobe_path or "ffprobe", "-v", "error", "-show_streams",
          "-show_format", "-of", "json", path],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=getattr(config, "media_process_timeout_seconds", 30), check=True,
     )
     return json.loads(probe.stdout)
 
@@ -227,11 +227,11 @@ def verify_a2va_mux(path: str, source: str, generation: Dict[str, Any], config) 
         common + [source, "-map", "0:a:0", "-af", "asetpts=PTS-STARTPTS,apad",
                   "-t", f"{duration:.9f}", "-c:a", "aac", "-b:a", "192k",
                   "-f", "adts", "pipe:1"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=getattr(config, "media_process_timeout_seconds", 30), check=True,
     ).stdout
     actual = subprocess.run(
         common + [path, "-map", "0:a:0", "-c:a", "copy", "-f", "adts", "pipe:1"],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=getattr(config, "media_process_timeout_seconds", 30), check=True,
     ).stdout
     if not expected or actual != expected:
         raise ValueError("a2va MP4 soundtrack differs from original supplied audio")

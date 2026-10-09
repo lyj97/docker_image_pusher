@@ -98,12 +98,10 @@ def run(args,binding,remote):
         matches=matching_profiles(task)
         if len(matches)!=1:raise ValueError('acceptance requires a reviewed profile')
         profile=matches[0]
-        deadline=time.monotonic()+7200
         while True:
             status=remote.json('/v1/status')
             if status.get('stop_required') or status.get('draining'):raise RuntimeError('preparation failed or draining')
             if any(p.get('prepared') is True and p.get('profile_digest')==profile['profile_digest'] for p in status.get('profiles',[status['profile']])):break
-            if time.monotonic()>=deadline:raise RuntimeError('profile preparation timed out')
             if status['profile'].get('prepared'):remote.json('/v1/prepare',{'profile_digests':[profile['profile_digest']]})
             time.sleep(5)
         execution='att_acceptance_'+uuid.uuid4().hex
@@ -123,8 +121,7 @@ def run(args,binding,remote):
             json.dump(intent,output);output.flush();os.fsync(output.fileno())
         remote.json('/v1/executions',intent)
     profile=matching_profiles(task)[0]
-    deadline=time.monotonic()+3600
-    while time.monotonic()<deadline:
+    while True:
         view=remote.json('/v1/executions/'+execution)
         (args.output/'observation.json').write_text(json.dumps(view))
         if view.get('terminal'):
@@ -148,7 +145,6 @@ def run(args,binding,remote):
             return
         if view['state']=='uncertain':raise RuntimeError('uncertain execution; retain intent and reconcile, never repeat POST')
         time.sleep(2)
-    raise RuntimeError('acceptance observation timeout; execution identity retained')
 
 
 if __name__=='__main__':main()

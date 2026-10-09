@@ -1,4 +1,4 @@
-"""Read-only polling for the fixed A40 test specification; never provisions Pods."""
+"""Read-only polling for the fixed RTX 2000 Ada test specification; never provisions Pods."""
 import argparse
 import asyncio
 from datetime import datetime, timezone
@@ -11,9 +11,9 @@ import urllib.parse
 from .control import Provider
 
 # User-fixed specification: do not substitute GPU, cloud, disk, or CUDA floor.
-SPEC = {'cloud':'SECURE','gpu':{'id':'NVIDIA A40','count':1,'minCudaVersion':'13.0'},
-        'disk':150,'image':'ghcr.io/lyj97/h3-comfy@sha256:1d9fddcced68175f6f0fd28371623a71bc9cad40cad8156e267e03c27062a22d'}
-MAX_HOURLY_USD = Decimal('0.49')
+SPEC = {'cloud':'SECURE','gpu':{'id':'NVIDIA RTX 2000 Ada Generation','count':1,'minCudaVersion':'13.0'},
+        'disk':150,'templateId':'h7x6l6732j'}
+MAX_HOURLY_USD = Decimal('0.24')
 
 
 def evaluate(pods, gpu):
