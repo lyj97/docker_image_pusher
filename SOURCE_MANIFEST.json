@@ -58,7 +58,7 @@
     "deploy/runpod/build_audio.py": "4f3aaaa8ba0ef35c170b71fe135a3608605f7adb38b5d04dde7102fdc9364ad9",
     "deploy/runpod/build_nodes.py": "75930729a2f13b16e46b73f26ccfade01420f58d8207d0bfaa585c279c78e423",
     "deploy/runpod/check_audio.py": "8cf0046d24a3a73793c2b481a3ca96d9c01836116bd19d096f29211b98acb41d",
-    "deploy/runpod/check_comfy_boot.py": "50eb199f65c80fec841e424a950729175ac64227fa2740ad557c3b9b74c3f5e5",
+    "deploy/runpod/check_comfy_boot.py": "b799ce4a7d75cd774aaf6a7e644f8b3f2fa54d5dcde430cf4dc0dff90e6411e8",
     "deploy/runpod/check_image.py": "80b60c8f66c32ade849eae762c420d2470408ccf35a7edef143f751fd43df52f",
     "deploy/runpod/check_ssh.py": "c6c302d9d32d11b0a4c77cb6254412db1beca8711a56200ae0f03f47016d1076",
     "deploy/runpod/start-ssh.sh": "fa767e1789c6bfd996b8dff81a6c7e6f034300cf65e8992130dc338f08c3f60e",
@@ -70,7 +70,7 @@
     "shared/comfy_workflow.py": "61fc1c7b289e0848961714d9caec22566e518e099a74290782d6d2765533f0e2",
     "shared/cuda_audio.py": "91dfe21c668caaa936da3291bc511e1ffd0b67c634a836eaf083b3b303e9ec01",
     "shared/cuda_h3.py": "c77e5df5520cf42a7c318d3df84f48fc2ab434e0faf1e523b44ac8889b9b4d14",
-    "shared/execution.py": "d8377968c4961804ceb8115e931f5a06d6d7b934f746016f0dfe070993cb87b8",
+    "shared/execution.py": "34402061f3b28455cff81e9a79ed4b25af75dd9547b2ac018c19e114ea9fa87a",
     "shared/execution_profiles/audio-runtime.sources.json": "21205559714a0b1ba2c60c24caa489bbd6ad702b38dd854f878767436729fff1",
     "shared/execution_profiles/cosyvoice3.models.json": "cbf49ed8b53e96987b5ea4d17ae68cbf2cb1ce94afbd2137f50dfc81b4a484a8",
     "shared/execution_profiles/da3-depth.models.json": "f24c1ab8edf7b2d631a1a15acac3d677aab62364a3348020ff2f87eb970fc2db",
@@ -96,5 +96,5 @@
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5",
     "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "fa0adf07f08668fa35b435a35b57570569a3b86e"
+  "source_revision": "bc0c6eeb6a0e5d16299b77d262ca0082a6e6c02f"
 }

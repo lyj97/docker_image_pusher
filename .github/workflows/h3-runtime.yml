@@ -63,10 +63,11 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' "$H3_IMAGE" > h3-built-images.txt
-          for variant in turbo lanpaint a2va native reference vace-control vace-joiner da3 sdpose qwen-design qwen-custom qwen-clone qwen-align cosyvoice; do
+          for variant in turbo lanpaint lanpaint-official a2va native reference vace-control vace-joiner da3 sdpose qwen-design qwen-custom qwen-clone qwen-align cosyvoice; do
             case "$variant" in
               turbo) profile=h3-turbo-int8-768p-cu130-v1 ;;
               lanpaint) profile=h3-lanpaint-int8-256-cu130-v1 ;;
+              lanpaint-official) profile=h3-lanpaint-official-int8-cu130-v1 ;;
               a2va) profile=h3-a2va-int8-544x960-cu130-v1 ;;
               native) profile=h3-native-int8-cu130-v1 ;;
               reference) profile=h3-reference-int8-cu130-v1 ;;

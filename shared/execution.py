@@ -39,7 +39,7 @@ def profiles():
     profile['generation_node'] = '7'
     profile['input_slots'] = []
     lan = dict(profile, profile_id='h3-lanpaint-int8-256-cu130-v1',
-        label='H3 LanPaint + ControlNet · 256×256 · 39 帧',
+        label='H3 LanPaint AV + 普通采样 + ControlNet · 256×256 · 39 帧',
         workflow_template=json.loads((root / 'h3-lanpaint-256.workflow.json').read_text()),
         models=json.loads((root / 'h3-lanpaint.models.json').read_text()),
         variable_inputs=[['5', 'prompt', 'text'], ['6', 'noise_seed', 'seed']],
@@ -96,7 +96,32 @@ def profiles():
             'nodes', 'native_modes', 'parameterized_native', 'runtime_sources')})
     from .comfy_variants import variants
     from .cuda_audio import profiles as audio_profiles
-    return (profile, lan, audio, native, ref, *variants(profile), *audio_profiles(profile))
+    official = copy.deepcopy(lan)
+    official.pop('runtime_adapter')
+    official.update(profile_id='h3-lanpaint-official-int8-cu130-v1',
+        label='H3 官方 LanPaint 条件采样 + ControlNet', flexible_media=True,
+        official_lanpaint=True,
+        precision=lan['precision'] + ' / 官方 LanPaint 算法；BasicGuider 明确适配 CFG=1、零化负向条件',
+        validation='官方固定采样器接口已核对；CUDA 推理与局修质量待实测，不阻止尝试',
+        runtime_sources={'shared/execution.py': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
+    official['workflow_template']['graph']['10'].update(class_type='LanPaint_SamplerCustomAdvanced')
+    official['workflow_template']['graph']['10']['inputs'].update(
+        LanPaint_NumSteps=5, LanPaint_Lambda=5.0, LanPaint_StepSize=0.2,
+        LanPaint_PromptMode='Image First', LanPaint_Info='LanPaint Custom Sampler Adv.')
+    official['nodes']['nodes'][0]['classes'].append('LanPaint_SamplerCustomAdvanced')
+    official['variable_inputs'] += [
+        ['5','width','dimension'], ['5','height','dimension'], ['5','length','positive_integer'],
+        ['8','steps','positive_integer'], ['8','denoise','unit_interval'],
+        ['10','LanPaint_NumSteps','nonnegative_integer'], ['10','LanPaint_Lambda','number'],
+        ['10','LanPaint_StepSize','positive_number'],
+        ['10','LanPaint_Info','text'], ['22','blend_overlap','nonnegative_integer'],
+        ['22','audio_crossfade','unit_interval']]
+    official['nodes_digest'] = digest(official['nodes'])
+    official['profile_digest'] = digest({k:official[k] for k in (
+        'profile_id','backend','gpu_vendor','comfy_version','comfy_commit','torch_version',
+        'workflow_template','models','nodes','variable_inputs','generation_node','input_slots',
+        'output_contract','flexible_media','official_lanpaint','runtime_sources','precision')})
+    return (profile, lan, audio, native, ref, *variants(profile), *audio_profiles(profile), official)
 
 
 def profile_by_id(identity):
@@ -139,6 +164,15 @@ def execution_workflow(task, profile=None):
     if task.get('mode') != 'a2va':
         workflow = copy.deepcopy(task['workflow'])
         profile = profile or next(iter(matching_profiles(task)), None)
+        if profile and profile.get('official_lanpaint'):
+            # Vendor requires guider.cfg; CFG=1 keeps the business conditional prediction,
+            # while zeroed negative conditioning supplies its explicit Langevin contract.
+            guider = workflow['graph']['7']['inputs']
+            workflow['graph']['h3lpnegative'] = {'class_type':'ConditioningZeroOut',
+                'inputs':{'conditioning':guider['conditioning']}}
+            workflow['graph']['7'] = {'class_type':'CFGGuider', 'inputs':{
+                'model':guider['model'], 'positive':guider['conditioning'],
+                'negative':['h3lpnegative',0], 'cfg':1.0}}
         if profile and profile.get('runtime_adapter'):
             workflow['graph']['h3avmask'] = {'class_type':'H3AVMaskPrepare', 'inputs':{'latent':['30', 0]}}
             workflow['graph']['10']['inputs']['latent_image'] = ['h3avmask', 0]
@@ -212,7 +246,9 @@ def _matches(task, profile):
             return False
         for ref, slot in zip(refs, profile['input_slots']):
             if profile.get('flexible_media'):
-                if ref.get('kind') != slot[0] or not str(ref.get('content_type', '')).startswith(slot[0] + '/'):
+                content_type = ref.get('content_type')
+                if ref.get('kind') != slot[0] or (content_type is not None
+                        and not str(content_type).startswith(slot[0] + '/')):
                     return False
             elif (ref.get('kind'), ref.get('content_type')) != tuple(slot):
                 return False

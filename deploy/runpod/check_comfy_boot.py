@@ -50,3 +50,21 @@ for p in profiles():
 print(json.dumps({'static_contracts':'passed','cpu_encoding':False,'cpu_decoding':False,
     'cpu_sampling':False,'model_download':False,'gpu_inference':False,
     'unverified':['real VAE latent shapes','mask edit semantics','GPU generation']}))
+
+# Official LanPaint handles its own AV masks and requires a CFG-capable guider.
+p = next(p for p in profiles() if p.get('official_lanpaint'))
+business = {'mode':'comfyui_video', 'workflow':p['workflow_template']}
+graph = execution_workflow(business,p)['graph']
+assert 'h3avmask' not in graph
+assert graph['10']['class_type'] == 'LanPaint_SamplerCustomAdvanced'
+assert graph['10']['inputs']['latent_image'] == ['30',0]
+assert graph['10']['inputs']['LanPaint_PromptMode'] == 'Image First'
+assert graph['22']['inputs']['samples'] == ['10',0]
+assert graph['7']['class_type'] == 'CFGGuider' and graph['7']['inputs']['cfg'] == 1.0
+assert graph['h3lpnegative']['class_type'] == 'ConditioningZeroOut'
+vendor = (root/'custom_nodes/LanPaint/src/LanPaint/nodes.py').read_text()
+assert 'model.LanPaint_cfg_BIG = guider.cfg' in vendor
+assert 'with override_sample_function():' in vendor
+core = (root/'comfy_extras/nodes_custom_sampler.py').read_text()
+assert 'class CFGGuider' in core and 'guider.set_cfg(cfg)' in core
+assert 'class ConditioningZeroOut' in (root/'nodes.py').read_text()
