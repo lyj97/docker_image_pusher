@@ -48,12 +48,12 @@ def lanpaint_error(task):
             duration = float(f["duration"])
             if not math.isfinite(duration) or abs(duration - 39 / 24) > 1 / 24:
                 return "LanPaint视频时间轴不符合39帧、24fps"
-            if i in (0, 3):
+            if i == 3 or (i == 0 and f.get("has_audio")):
                 ad = float(f.get("audio_duration", 0))
                 audio_start = float(f.get("audio_start", 0))
                 if (not f.get("has_audio") or not math.isfinite(ad) or abs(ad - duration) > 1 / 24
                         or not math.isfinite(audio_start) or abs(audio_start - start) > 1 / 24):
-                    return "LanPaint源视频和编码视频需要与视频时间轴一致的音轨"
+                    return "LanPaint编码视频必须有音轨；存在的源音轨须与视频时间轴一致"
         except (ValueError, TypeError, KeyError, ZeroDivisionError):
             return "素材媒体元数据无效，须在开机前核对"
     return None
