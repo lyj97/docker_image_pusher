@@ -105,6 +105,11 @@ def persist(worker, attempt_id, state):
 
 
 def bind_graph(task, local_inputs, root, namespace):
+    if not re.fullmatch(r'h3_[0-9a-f]{32}', namespace):
+        raise ValueError('invalid ComfyUI input namespace')
+    root = Path(root)
+    if any(p.is_symlink() for p in (root, *root.parents, root / 'input')):
+        raise ValueError('unsafe ComfyUI input binding')
     graph = copy.deepcopy(task['workflow']['graph'])
     folder = root / 'input' / namespace
     folder.mkdir(mode=0o700, exist_ok=False)
@@ -112,17 +117,54 @@ def bind_graph(task, local_inputs, root, namespace):
              'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/wav': '.wav',
              'audio/mpeg': '.mp3', 'audio/flac': '.flac', 'audio/ogg': '.ogg'}
     refs = {r['asset_id']: r for r in task['references']}
-    for index, binding in enumerate(task['workflow']['bindings']):
-        asset = binding['asset_id']
-        source = local_inputs['ref:' + asset]
-        suffix = types.get(refs[asset].get('content_type'))
-        if suffix is None:
-            raise ValueError('unsupported bound asset media type')
-        name = f'asset_{index}{suffix}'
-        shutil.copyfile(source, folder / name)
-        graph[binding['node_id']]['inputs'][binding['input']] = namespace + '/' + name
-    graph[task['workflow']['output_node']]['inputs']['filename_prefix'] = namespace + '/video'
-    return graph
+    try:
+        for index, binding in enumerate(task['workflow']['bindings']):
+            asset = binding['asset_id']
+            source = local_inputs['ref:' + asset]
+            suffix = types.get(refs[asset].get('content_type'))
+            if suffix is None:
+                raise ValueError('unsupported bound asset media type')
+            name = f'asset_{index}{suffix}'
+            with (folder / name).open('xb') as output, open(source, 'rb') as incoming:
+                shutil.copyfileobj(incoming, output)
+            node = graph[binding['node_id']]
+            if node['class_type'] == 'LanPaint_VideoMaskEditor' and binding['input'] == 'video':
+                # The pinned node lists only root files. A hard link retains ownership proof.
+                visible = namespace + '_' + name
+                os.link(folder / name, root / 'input' / visible)
+            else:
+                visible = namespace + '/' + name
+            node['inputs'][binding['input']] = visible
+        graph[task['workflow']['output_node']]['inputs']['filename_prefix'] = namespace + '/video'
+        return graph
+    except BaseException:
+        cleanup_bound_inputs(root, namespace)
+        raise
+
+
+def cleanup_bound_inputs(root, namespace):
+    """Remove owned input aliases only when they still share the private file's inode."""
+    root = Path(root)
+    if not re.fullmatch(r'h3_[0-9a-f]{32}', namespace):
+        raise ValueError('invalid ComfyUI input namespace')
+    folder = root / 'input' / namespace
+    if any(p.is_symlink() for p in (root, *root.parents, root / 'input', folder)):
+        raise ValueError('unsafe ComfyUI input cleanup')
+    if folder.exists():
+        if not folder.is_dir() or any(p.is_symlink() for p in folder.rglob('*')):
+            raise ValueError('unsafe ComfyUI input cleanup')
+        aliases = []
+        for source in folder.iterdir():
+            if not re.fullmatch(r'asset_[0-9]+\.[a-z0-9]+', source.name) or not source.is_file():
+                continue
+            alias = root / 'input' / (namespace + '_' + source.name)
+            if alias.is_symlink():
+                raise ValueError('unsafe ComfyUI input cleanup')
+            if alias.is_file() and os.path.samefile(source, alias):
+                aliases.append(alias)
+        for alias in aliases:
+            alias.unlink()
+        shutil.rmtree(folder)
 
 
 def cleanup_inputs(worker, state):
@@ -135,13 +177,7 @@ def cleanup_inputs(worker, state):
             or namespace != 'h3_' + str(state.get('prompt_id', '')).replace('-', '')
             or str(root.resolve()) != state.get('root')):
         return  # Legacy/unowned paths require local operator recovery.
-    folder = root / 'input' / namespace
-    if any(p.is_symlink() for p in (root, *root.parents, root / 'input', folder)):
-        raise ValueError('unsafe ComfyUI input cleanup')
-    if folder.exists():
-        if not folder.is_dir() or any(p.is_symlink() for p in folder.rglob('*')):
-            raise ValueError('unsafe ComfyUI input cleanup')
-        shutil.rmtree(folder)
+    cleanup_bound_inputs(root, namespace)
 
 
 def native_request(api, path, body, token):

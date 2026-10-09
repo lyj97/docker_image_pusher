@@ -10,7 +10,7 @@
     "burst/h3burst/inputs.py": "1929a627e259af55735008c5a5c8a565ce678ec0b5da876d722ce0773694c740",
     "burst/h3burst/media.py": "cfa9a6bca9fa8aceb564bfa6f7e3db59af4d3d52e44ce27000ea670c87e2a9ab",
     "burst/h3burst/observe.py": "a5b72f0aed73a7acfd2cee5c1463a6f8073d6ee1265bd4cbd5e44b6397b79d78",
-    "burst/h3burst/pod.py": "ec52016187f1b0505281a61d25834d1efa5c14eb32fdc0b08919375e728281d3",
+    "burst/h3burst/pod.py": "e85d3f0cc97f371a9f6091caac2c33926b0c71b176b99eb7a120468a3b33b127",
     "burst/h3burst/policy.py": "4a659e3d833c04287c094f3a215bb3b6c4e3a4aa6de0b60b3670fe6b4bb80959",
     "burst/h3burst/prepare.py": "39cc3e134a3684a39b406d73bbcf7b827e98c01e096d868a6783a06ccb8b528e",
     "burst/h3burst/remote_runner.py": "06c78003ad31245b5407f3cc0da13fb80e7ae5cc8f758bed6619c3a1b7692c5a",
@@ -27,7 +27,7 @@
     "client/h3worker/comfy_native.py": "39be758cd1f423534b78c39aecc0bdc89cc0c23d176adfe8d247b041055ce850",
     "client/h3worker/comfy_preview.py": "e5a9ce32e1c2f2b8e2dfd42dc3a0a0925ae604df2b7fb953726c1a6d49ac1284",
     "client/h3worker/comfy_progress.py": "47a93ae27ac8a32c4e763dc814cf60abb5af19cb997d23aad05a19d27498ad06",
-    "client/h3worker/comfy_runner.py": "b178e425558e1c49378758721e8ecd3a1612d812494fc10688c44df548ee48ae",
+    "client/h3worker/comfy_runner.py": "fc8a258ca6a2372389d09801e754171917bec963f475b2617f82ee7521d49c51",
     "client/h3worker/config.py": "58d4a563703902e6e0e1fb33c2db46214c9e21744b193fffddb962cb0eea9504",
     "client/h3worker/cpu_overlap.py": "7f96ed3dee4d59b30f2100dcd6dcd4697b2483b6639d3242c022886fcff72594",
     "client/h3worker/enable_qwen3.py": "27d16e5380181b612f6c032105d0f4da62de0bcbfb268f949aac4a5746b55963",
@@ -52,7 +52,7 @@
     "deploy/runpod/Dockerfile": "0eed360a7e4b67387854f9fe5df843c0820670774223bf7747b265dfea324f57",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
     "deploy/runpod/build_nodes.py": "217495860f3282e69fba69d8c60fb95c1915e110abceec0338d0f2189c878277",
-    "deploy/runpod/check_comfy_boot.py": "e5572597cec360ff1c3d7c32095e17bc5f9d7873e52f8d9607fd2651866e983b",
+    "deploy/runpod/check_comfy_boot.py": "6afd1122d62a78a11c3cfc8f2d631f4a68f6b0b510068e22353ec589c445a913",
     "deploy/runpod/check_image.py": "0101680251cef743c9f6e84d68db076552f86421aa3e6c79eca9eade515f9806",
     "deploy/runpod/check_ssh.py": "c6c302d9d32d11b0a4c77cb6254412db1beca8711a56200ae0f03f47016d1076",
     "deploy/runpod/start-ssh.sh": "fa767e1789c6bfd996b8dff81a6c7e6f034300cf65e8992130dc338f08c3f60e",
@@ -72,5 +72,5 @@
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5"
   },
-  "source_revision": "e940b0bbe14daf872bfa37165af196bfda059355"
+  "source_revision": "a755819b8ca062b65542a0119d5f592c184e449e"
 }

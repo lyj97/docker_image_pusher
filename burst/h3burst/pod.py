@@ -97,7 +97,7 @@ class Pod:
         return proof
 
     def stop_required(self):
-        return self.engine.failed() or (self.stop_on_task_failure and any(
+        return self.engine.failed() or self.db.execute("SELECT 1 FROM meta WHERE key='input_cleanup_failed'").fetchone() is not None or (self.stop_on_task_failure and any(
             json.loads(r[0]).get('generation') == self.generation and json.loads(r[0]).get('state') == 'failed'
             for r in self.db.execute('SELECT record FROM execution')))
 
@@ -139,23 +139,33 @@ class Pod:
                 raise Refused('exclusive_slot_busy')
             prompt = str(uuid.uuid4())
             execution_task = dict(task, workflow=execution_workflow(task, matches[0]), references=task_references(task))
-            if execution_task.get('references'):
-                from .inputs import paths
-                from h3worker.comfy_runner import bind_graph
-                graph = bind_graph(execution_task, paths(self, task, body.get('inputs', {})),
-                    self.engine.comfy_root, 'h3_' + prompt.replace('-', ''))
-            else:
-                if body.get('inputs'):
-                    raise Refused('input_identity_conflict', 400)
-                graph = copy.deepcopy(execution_task['workflow']['graph'])
-                graph[execution_task['workflow']['output_node']]['inputs']['filename_prefix'] = 'h3_' + prompt.replace('-', '') + '/video'
             record = {'execution_id': execution, 'generation': self.generation,
                 'request_digest': request_digest, 'prompt_id': prompt, 'state': 'submitting',
-                'terminal': False, 'task': task, 'graph_digest': digest(graph),
+                'terminal': False, 'task': task, 'graph_digest': digest(execution_task['workflow']['graph']),
                 'acceptance': acceptance, 'runtime_digest': digest({k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')}),
                 'runtime_proof':{k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')},
-                'cancel_requested': False, 'started_at': time.time()}
-            self.save(record)  # Synchronous FULL commit before the only Comfy POST.
+                'cancel_requested': False, 'started_at': time.time(), 'submission_started': False}
+            if execution_task.get('references'):
+                record['input_root'] = str(self.engine.comfy_root.resolve())
+            self.save(record)  # Intent owns private inputs before any copy or Comfy submission.
+            try:
+                if execution_task.get('references'):
+                    from .inputs import paths
+                    from h3worker.comfy_runner import bind_graph
+                    graph = bind_graph(execution_task, paths(self, task, body.get('inputs', {})),
+                        self.engine.comfy_root, 'h3_' + prompt.replace('-', ''))
+                else:
+                    if body.get('inputs'):
+                        raise Refused('input_identity_conflict', 400)
+                    graph = copy.deepcopy(execution_task['workflow']['graph'])
+                    graph[execution_task['workflow']['output_node']]['inputs']['filename_prefix'] = 'h3_' + prompt.replace('-', '') + '/video'
+            except BaseException:
+                record.update(state='failed', terminal=True, error_code='input_binding_failed')
+                self.save(record)
+                self.cleanup_inputs(record)
+                raise
+            record.update(graph_digest=digest(graph), submission_started=True)
+            self.save(record)  # FULL commit before the only Comfy POST; uncertainty never rebinds.
             try:
                 self.engine.submit(prompt, graph)
             except Refused as exc:
@@ -168,7 +178,24 @@ class Pod:
             else:
                 record['state'] = 'submitted'
             self.save(record)
+            self.cleanup_inputs(record)
             return self.public(record)
+
+    def cleanup_inputs(self, record):
+        if not record.get("terminal") or "input_root" not in record:
+            return
+        from h3worker.comfy_runner import cleanup_bound_inputs
+        root = self.engine.comfy_root
+        if str(root.resolve()) != record["input_root"]:
+            raise ValueError("ComfyUI input ownership conflict")
+        try:
+            cleanup_bound_inputs(root, "h3_" + record["prompt_id"].replace("-", ""))
+        except (OSError, ValueError):
+            record["error_code"] = "input_cleanup_failed"
+            self.save(record)
+            self.draining = True
+            with self.db:
+                self.db.execute("INSERT OR REPLACE INTO meta VALUES ('input_cleanup_failed','true')")
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
@@ -185,7 +212,12 @@ class Pod:
         try:
             with self.mutex:
                 record = self.load(execution)
-                if record['state'] in TERMINAL:return self.public(record)
+                if record.get('submission_started') is False and not record['terminal']:
+                    record.update(state='failed', terminal=True, error_code='input_binding_interrupted')
+                    self.save(record)
+                if record['state'] in TERMINAL:
+                    self.cleanup_inputs(record)
+                    return self.public(record)
             try:
                 state, output = self.engine.observe(record['prompt_id'], record['task'])
             except Exception:
@@ -216,6 +248,7 @@ class Pod:
                             # Completion is confirmed; invalid media is a terminal failure, not lost submission.
                             record.update(state='failed', terminal=True, error_code='artifact_validation_failed')
                             self.save(record)
+                            self.cleanup_inputs(record)
                             return self.public(record)
                         record['artifact'] = artifact
                         if record['acceptance']:
@@ -232,6 +265,7 @@ class Pod:
                     record['state'] = 'uncertain'  # Absence is not submission/cancellation proof.
                 record['last_observation'] = state
                 self.save(record)
+            self.cleanup_inputs(record)
             return self.public(record)
 
     def cancel(self, execution):
