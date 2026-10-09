@@ -96,7 +96,7 @@ class Engine:
                     profile = known[self.resource_current]
                 with (self.state_root / 'preparation.log').open('ab', buffering=0) as log:
                     self.download_models(profile, log, self.state_root / 'resource-progress.json',
-                        time.monotonic(), background=True)
+                        time.monotonic())
                 proof = {k:profile[k] for k in ('profile_digest', 'comfy_version',
                     'comfy_commit', 'torch_version', 'models_digest', 'nodes_digest')}
                 proof.update(prepared=True, gpu_vendor='nvidia', vram_bytes=self.proof['vram_bytes'])
@@ -113,7 +113,7 @@ class Engine:
                     self.background_preparing = False
                     self.resource_current = None
 
-    def download_models(self, profile, log, progress, started, background=False):
+    def download_models(self, profile, log, progress, started):
         models = profile['models']['models']
         missing = [m for m in models if self.verified_models.get(m['target']) != (m['sha256'],m['bytes'])]
         if shutil.disk_usage(self.comfy_root).free < sum(m['bytes'] for m in missing) + 4 * 1024**3:
@@ -135,11 +135,6 @@ class Engine:
                     atomic_json(progress, {'state':'preparing','profile_digest':profile['profile_digest'],
                         'model':model['target'],'bytes':size,'total_bytes':model['bytes'],
                         'last_progress_at':time.time()})
-                    if background:
-                        # Limit background disk/network pressure while inference owns the GPU.
-                        delay = size/(16*1024**2) - (time.monotonic()-at)
-                        if delay > 0 and self.stop_preparation.wait(delay):
-                            raise RuntimeError('preparation cancelled')
                 dest.flush();os.fsync(dest.fileno())
             if size != model['bytes'] or h.hexdigest() != model['sha256']:
                 raise RuntimeError('model download integrity failure')

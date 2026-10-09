@@ -4,7 +4,7 @@
     "burst/h3burst/__init__.py": "ace3344a2b9201fd507b2a2b3bed7ae266dce9f7d6d7e9496736be916d58df37",
     "burst/h3burst/acceptance.py": "d20826c7b2ed706ba459841f495997fd37fb6292dcbd78bf76c8dffc752ae34a",
     "burst/h3burst/control.py": "45fc956d2244f3ce29ce46e06fc5945292dff8462d0e16a17d50faed06c5b245",
-    "burst/h3burst/engine.py": "6fce980b0f32abab4e6dbae7c07d42543808e745993976edaaa1abe414411cee",
+    "burst/h3burst/engine.py": "a6200e6c1b5d7473dc1b8147e429bdf193b119537d8e0ea0124792d7b520a586",
     "burst/h3burst/executor.py": "ddbe82a1b33aabc6ede215542ca7325285961ccd64fec6071bb7808921580912",
     "burst/h3burst/inputs.py": "c115644bdbb8a394666c866c20f39a1d49358825ea1a192ac6c67ed1352112c6",
     "burst/h3burst/media.py": "67c87407087f306acc186254c077def9d22738949d1e9f05d4fb31587f26d295",
@@ -71,5 +71,5 @@
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5"
   },
-  "source_revision": "9c51c46de7a0f074f42d6d06a90a02d6df3795c4"
+  "source_revision": "4a831af6b5653fe1a3921c0985930ef587287af9"
 }
