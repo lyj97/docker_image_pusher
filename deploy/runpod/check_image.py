@@ -21,6 +21,19 @@ for directory in ('/opt/h3-service','/root/.ssh','/root/.aws','/root/.docker'):
             or path.suffix in ('.pem','.key','.sqlite','.sqlite3')
             or path.name in ('id_rsa','id_ed25519','credentials','config.json','executor.env','controller.env'))), 'credential or runtime data file in image'
 
+from importlib.metadata import version, PackageNotFoundError
+from packaging.requirements import Requirement
+
+# pip check does not validate a checked-out source tree's requirements.
+for line in Path('/opt/comfyui-baked/requirements.txt').read_text().splitlines():
+    line=line.split('#',1)[0].strip()
+    if not line:continue
+    requirement=Requirement(line)
+    if requirement.marker is not None and not requirement.marker.evaluate():continue
+    try:installed=version(requirement.name)
+    except PackageNotFoundError:raise AssertionError('missing core requirement: '+requirement.name) from None
+    assert installed in requirement.specifier, 'incompatible core requirement: '+str(requirement)+'; installed '+installed
+
 assert torch.__version__ == profiles()[0]['torch_version']
 assert os.environ.get('H3POD_BAKED_NODES_REQUIRED') == '1'
 assert Path('/usr/sbin/sshd').is_file() and shutil.which('ssh-keygen')

@@ -7,6 +7,15 @@ import subprocess
 from shared.execution import profiles
 from h3burst.prepare import manifest_nodes
 
+comfy_root=Path('/opt/comfyui-baked')
+commits={p['comfy_commit'] for p in profiles()}
+if len(commits) != 1:raise ValueError('profiles require different ComfyUI commits')
+commit=next(iter(commits))
+if subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=comfy_root,text=True).strip():
+    raise ValueError('base ComfyUI contains tracked modifications')
+subprocess.run(['git','fetch','--depth','1','origin',commit],cwd=comfy_root,check=True,timeout=180)
+subprocess.run(['git','checkout','--detach',commit],cwd=comfy_root,check=True,timeout=180)
+
 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}
 manifest_nodes({'schema_version':1, 'nodes':list(nodes.values())})
 for name, node in nodes.items():
