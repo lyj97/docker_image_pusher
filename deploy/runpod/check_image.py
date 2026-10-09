@@ -49,7 +49,14 @@ for name, node in nodes.items():
         assert not (root/'examples').exists(), 'demo assets in runtime image'
         assert subprocess.check_output(['git','config','--get','remote.origin.partialclonefilter'],cwd=root,text=True).strip() == 'blob:none'
 profile = profile_by_id(os.environ.get('H3POD_PROFILE_ID', profiles()[0]['profile_id']))
-assert profile['models']['models'] and profile['workflow_template']['graph']
+for item in profiles():
+    for source, expected in item.get('runtime_sources', {}).items():
+        import hashlib
+        assert hashlib.sha256((Path('/opt/h3-service') / source).read_bytes()).hexdigest() == expected
+reference = Path('/opt/comfyui-baked/custom_nodes/H3Reference/__init__.py')
+assert reference.read_bytes() == Path('/opt/h3-service/client/comfy_h3_reference_node/__init__.py').read_bytes()
+assert profile['models']['models']
+assert profile['backend']=='audio_cuda' or profile['workflow_template']['graph']
 print(json.dumps({'profile_id':profile['profile_id'], 'baked_nodes':list(nodes),
                   'torch_version':torch.__version__, 'gpu_generation_tested':False}))
 

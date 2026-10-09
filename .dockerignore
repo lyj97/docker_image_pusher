@@ -4,6 +4,8 @@
 !deploy/runpod/Dockerfile
 !deploy/runpod/check_image.py
 !deploy/runpod/build_nodes.py
+!deploy/runpod/build_audio.py
+!deploy/runpod/check_audio.py
 !deploy/runpod/start-ssh.sh
 !shared/
 !shared/*.py
@@ -14,6 +16,10 @@
 !client/h3worker/*.py
 !client/vace_smoke.py
 !client/vace_reconcile.py
+!client/comfy_h3_contract_node/
+!client/comfy_h3_contract_node/*.py
+!client/comfy_h3_reference_node/
+!client/comfy_h3_reference_node/*.py
 !burst/
 !burst/h3burst/
 !burst/h3burst/*.py

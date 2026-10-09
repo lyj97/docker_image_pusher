@@ -57,6 +57,8 @@ class Engine:
         self.error = False
         self.stop_preparation = threading.Event()
         self.started_at = time.time()
+        from .audio_process import AudioProcesses
+        self.audio = AudioProcesses(self.state_root/'audio',self.comfy_root/'models',self.comfy_root/'output')
 
     def evidence(self):
         return dict(self.proof)
@@ -168,6 +170,7 @@ class Engine:
         return self.error or (self.process is not None and self.process.poll() is not None)
 
     def empty(self):
+        if not self.audio.empty():return False
         if self.process is None:
             return self.phase == 'failed'
         if self.process.poll() is not None:
@@ -182,6 +185,12 @@ class Engine:
 
     def submit(self, prompt, graph):
         import vace_smoke
+        if set(graph) == {'_audio'}:
+            # Exclusive ownership was committed before this call. Unload idle Comfy
+            # models so a completed video task cannot occupy the audio job's VRAM.
+            self.api.json('/free', {'unload_models':True,'free_memory':True})
+            self.audio.submit(prompt,graph['_audio'])
+            return
         try:
             value = self.api.json('/prompt', {'prompt': graph, 'prompt_id': prompt, 'client_id': prompt})
         except vace_smoke.PromptRejected:
@@ -190,20 +199,33 @@ class Engine:
             raise Refused('prompt_identity_uncertain')
 
     def observe(self, prompt, task):
+        if task.get('mode') in ('tts','align'):return self.audio.observe(prompt)
         from vace_reconcile import observe
         return_state, item = observe(self.api, prompt)
         return return_state['state'], item
 
     def cancel(self, prompt):
+        if prompt in self.audio.jobs:
+            self.audio.cancel(prompt)
+            return
         # v0.39 scoped job API. Never global /interrupt or delete arbitrary queue entries.
         self.api.json('/api/jobs/' + prompt + '/cancel', {})
 
     def artifact(self, item, record):
         from h3worker.comfy_runner import output_path
         from .media import video_result
-        path = output_path(item, self.comfy_root,
-            'h3_' + record['prompt_id'].replace('-', '') + '/video', execution_workflow(record['task'])['output_node'])
-        result = video_result(path, 'ffprobe', record['task'])
+        if record['task'].get('mode') in ('tts','align'):
+            from .media import audio_result
+            path = Path(item)
+            expected = self.audio.output_root / ('h3_'+record['prompt_id'].replace('-','')) / (
+                'alignment.json' if record['task']['mode']=='align' else 'result.wav')
+            if path != expected:raise Refused('unsafe_artifact_path')
+            safe_root(path)
+            result = audio_result(path,record['task'])
+        else:
+            path = output_path(item, self.comfy_root,
+                'h3_' + record['prompt_id'].replace('-', '') + '/video', execution_workflow(record['task'])['output_node'])
+            result = video_result(path, 'ffprobe', record['task'])
         size, sha = file_digest(path)
         if size <= 0:
             raise Refused('output_size_exceeds_bound')
@@ -237,7 +259,7 @@ class Engine:
             with log_path.open('ab', buffering=0) as log:
                 # Exact nodes/dependencies/provenance were verified when publishing this image.
                 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}
-                for name in (*nodes, 'H3AVContract'):
+                for name in (*nodes, 'H3AVContract', 'H3Reference'):
                     shutil.copytree(Path('/opt/comfyui-baked/custom_nodes') / name,
                                     self.comfy_root / 'custom_nodes' / name)
                 if self.stop_preparation.is_set():
@@ -247,7 +269,7 @@ class Engine:
                     '--port', '8188', '--disable-auto-launch', '--disable-partner-nodes', '--cache-none',
                     '--disable-all-custom-nodes']
                 if nodes:
-                    argv += ['--whitelist-custom-nodes', *nodes, 'H3AVContract']
+                    argv += ['--whitelist-custom-nodes', *nodes, 'H3AVContract', 'H3Reference']
                 self.comfy_log = (self.state_root / 'comfy.log').open('ab', buffering=0)
                 self.process = subprocess.Popen(argv, cwd=self.comfy_root,
                     stdout=self.comfy_log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -314,6 +336,7 @@ def main():
         threading.Thread(target=engine.preparation, daemon=True, name='h3-pod-prepare').start()
         async with protocol_lifespan(app):
             yield
+        engine.audio.close()
         if engine.process and engine.process.poll() is None:
             terminate(engine.process)
         pod.close()

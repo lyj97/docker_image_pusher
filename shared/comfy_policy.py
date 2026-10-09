@@ -33,9 +33,12 @@ def dangerous_key(key):
             or any(x in key for x in ('output_path', 'directory', 'filename', 'command', 'script', 'endpoint', 'url', 'prefix')))
 
 
-def validate(task, extra_denied=()):
+def validate(task, extra_denied=(), *, _registered=True):
     """Return bounded diagnostics; validate before copying/hashing/injecting graphs."""
     try:
+        if _registered:
+            from .execution import policy_view
+            task = policy_view(task)
         _validate(task, extra_denied)
         return []
     except (ValueError, TypeError, RecursionError, OverflowError) as exc:

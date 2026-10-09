@@ -5,6 +5,24 @@ import math
 import subprocess
 
 
+def audio_result(path, task):
+    if task['mode'] == 'align':
+        from pathlib import Path
+        from shared.h3proto import validate_alignment_payload
+        payload = json.loads(Path(path).read_text())
+        problems = validate_alignment_payload(payload, requested_text=task['prompt'])
+        if problems:raise ValueError('alignment differs from request: '+'; '.join(problems[:3]))
+        return {'text':payload['text'],'segments':len(payload['segments']),
+            'tokens':sum(len(i.get('words') or []) or 1 for i in payload['segments'])}
+    import wave
+    with wave.open(str(path),'rb') as wav:
+        rate, channels, samples = wav.getframerate(),wav.getnchannels(),wav.getnframes()
+        if rate<=0 or channels<=0 or samples<=0 or wav.getsampwidth()!=2:
+            raise ValueError('invalid PCM16 audio output')
+        return {'sample_rate':rate,'channels':channels,'samples':samples,
+            'duration_seconds':samples/rate,'seed':str(task.get('seed',42))}
+
+
 def video_result(path, ffprobe, task):
     process = subprocess.run([ffprobe or 'ffprobe', '-v', 'error', '-count_frames',
         '-show_streams', '-show_format', '-of', 'json', str(path)],
@@ -14,22 +32,28 @@ def video_result(path, ffprobe, task):
     data = json.loads(process.stdout)
     videos = [s for s in data.get('streams', []) if s.get('codec_type') == 'video']
     audios = [s for s in data.get('streams', []) if s.get('codec_type') == 'audio']
-    if len(videos) != 1 or len(audios) != 1:
-        raise ValueError('H3 profile requires one video and one audio stream')
-    v = videos[0]
-    audio_duration = float(audios[0].get('duration') or 0)
-    audio_start = float(audios[0].get('start_time') or 0)
     from shared.execution import generation_specification
     specification = generation_specification(task)
+    expected_audio = specification.get('audio', 'required')
+    if len(videos) != 1 or len(audios) != (0 if expected_audio == 'none' else 1):
+        raise ValueError('media streams differ from registered output contract')
+    v = videos[0]
+    audio_duration = float(audios[0].get('duration') or 0) if audios else 0
+    audio_start = float(audios[0].get('start_time') or 0) if audios else 0
     width, height = int(v['width']), int(v['height'])
     frames = int(v['nb_read_frames'])
     fps = float(Fraction(v['avg_frame_rate']))
     duration = float(v.get('duration') or data['format']['duration'])
-    if (width != specification['width'] or height != specification['height']
-            or frames != specification['length'] or fps != 24
+    expected_fps = specification.get('fps')
+    expected_fps = float(Fraction(str(expected_fps))) if expected_fps else None
+    if (width <= 0 or height <= 0 or frames <= 0 or not math.isfinite(fps) or fps <= 0
+            or (specification.get('width') and width != specification['width'])
+            or (specification.get('height') and height != specification['height'])
+            or (specification.get('length') and frames != specification['length'])
+            or (expected_fps and abs(fps - expected_fps) > 1e-6)
             or not math.isfinite(duration) or abs(duration - frames / fps) > 1 / fps):
         raise ValueError('media differs from reviewed generation specification')
-    if (not math.isfinite(audio_duration) or not math.isfinite(audio_start)
+    if audios and (not math.isfinite(audio_duration) or not math.isfinite(audio_start)
             or audio_duration <= 0 or abs(audio_duration - duration) > 1 / fps
             or abs(audio_start) > 1 / fps):
         raise ValueError('audio timeline differs from video specification')

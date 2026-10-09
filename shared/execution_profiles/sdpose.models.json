@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "repo": "Comfy-Org/SDPose",
+      "revision": "acb43fbe8142b54d9ebd52b720b81dd4e14c8d81",
+      "source": "checkpoints/sdpose_wholebody_fp16.safetensors",
+      "target": "checkpoints/sdpose_wholebody_fp16.safetensors",
+      "bytes": 1916645792,
+      "sha256": "63d01f9a7494560693b24767f4469d59c9d3266b31ff0a253e74d1e611442721"
+    }
+  ]
+}

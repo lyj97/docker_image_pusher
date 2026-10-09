@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: easimon/maximize-build-space@c28619d8999a147d5e09c1199f84ff6af6ad5794
         with:
@@ -37,7 +37,6 @@ jobs:
         run: |
           set -euo pipefail
           revision="$(cat SOURCE_REVISION)"
-          test "${#revision}" -eq 40
           test "${#revision}" -eq 40
           package=h3-pod
           if [[ "$GITHUB_REPOSITORY" == lyj97/docker_image_pusher ]]; then package=h3-comfy; fi
@@ -63,19 +62,32 @@ jobs:
       - name: Build and check task-specific startup images
         run: |
           set -euo pipefail
-          for variant in turbo lanpaint a2va; do
+          printf '%s\n' "$H3_IMAGE" > h3-built-images.txt
+          for variant in turbo lanpaint a2va native reference vace-control vace-joiner da3 sdpose qwen-design qwen-custom qwen-clone qwen-align cosyvoice; do
             case "$variant" in
               turbo) profile=h3-turbo-int8-768p-cu130-v1 ;;
               lanpaint) profile=h3-lanpaint-int8-256-cu130-v1 ;;
               a2va) profile=h3-a2va-int8-544x960-cu130-v1 ;;
+              native) profile=h3-native-int8-cu130-v1 ;;
+              reference) profile=h3-reference-int8-cu130-v1 ;;
+              vace-control) profile=vace-control-cu130-v1 ;;
+              vace-joiner) profile=vace-joiner-cu130-v1 ;;
+              da3) profile=da3-depth-cu130-v1 ;;
+              sdpose) profile=sdpose-cu130-v1 ;;
+              qwen-design) profile=qwen-voice-design-cu130-v1 ;;
+              qwen-custom) profile=qwen-custom-voice-cu130-v1 ;;
+              qwen-clone) profile=qwen-clone-cu130-v1 ;;
+              qwen-align) profile=qwen-align-cu130-v1 ;;
+              cosyvoice) profile=cosyvoice3-cu130-v1 ;;
             esac
             image="${H3_IMAGE}-${variant}"
             docker build --platform linux/amd64 --build-arg "SERVICE_IMAGE=$H3_IMAGE" \
               --build-arg "PROFILE_ID=$profile" -f deploy/runpod/Dockerfile.profile -t "$image" .
             docker run --rm --network none --entrypoint python3 "$image" -B -c \
-              'import os,sys; from shared.execution import profile_by_id; p=profile_by_id(os.environ["H3POD_PROFILE_ID"]); assert p["profile_id"] == sys.argv[1]; assert p["models"]["models"]; assert p["workflow_template"]["graph"]' "$profile"
+              'import os,sys; from shared.execution import profile_by_id; p=profile_by_id(os.environ["H3POD_PROFILE_ID"]); assert p["profile_id"] == sys.argv[1]; assert p["models"]["models"]; assert p["backend"] == "audio_cuda" or p["workflow_template"]["graph"]' "$profile"
             docker run --rm --network none --entrypoint python3 "$image" \
               -B /opt/h3-service/check_image.py >> node-check.txt
+            printf '%s\n' "$image" >> h3-built-images.txt
           done
       - name: Publish versioned GHCR image
         env:
@@ -83,10 +95,10 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          for image in "$H3_IMAGE" "${H3_IMAGE}-turbo" "${H3_IMAGE}-lanpaint" "${H3_IMAGE}-a2va"; do
+          while IFS= read -r image; do
             docker push "$image"
             docker buildx imagetools inspect "$image" >> manifest.txt
-          done
+          done < h3-built-images.txt
           cat manifest.txt >> "$GITHUB_STEP_SUMMARY"
           cat image-size.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

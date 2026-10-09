@@ -25,8 +25,10 @@ async def snapshot(dsn, tenant, limit):
         async with conn.transaction(isolation='repeatable_read', readonly=True):
             await conn.execute("SET LOCAL statement_timeout = '10s'")
             now = await conn.fetchval('SELECT now()')
+            from shared.execution import profiles
+            audio = [r for p in profiles() for r in p.get('model_revisions',[])]
             tasks = await conn.fetch(candidate_sql(BASE_CLAIMABLE_TASK_SQL), tenant,
-                                     ['comfyui.video.v1', 'installed-model-revision'], ['comfyui_video', 'a2va'], limit + 1)
+                                     ['comfyui.video.v1', 'installed-model-revision', *audio], ['comfyui_video', 't2va', 'fl2va', 'ref2va', 'a2va','tts','align'], limit + 1)
             return tasks[:limit], now, len(tasks) <= limit
     finally:
         await conn.close()

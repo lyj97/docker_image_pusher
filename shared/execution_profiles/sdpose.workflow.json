@@ -1,0 +1,92 @@
+{
+  "graph": {
+    "1": {
+      "inputs": {
+        "file": null
+      },
+      "class_type": "LoadVideo"
+    },
+    "2": {
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ]
+      },
+      "class_type": "GetVideoComponents"
+    },
+    "3": {
+      "inputs": {
+        "ckpt_name": "sdpose_wholebody_fp16.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple"
+    },
+    "4": {
+      "inputs": {
+        "vae": [
+          "3",
+          2
+        ],
+        "image": [
+          "2",
+          0
+        ],
+        "model": [
+          "3",
+          0
+        ],
+        "batch_size": 16
+      },
+      "class_type": "SDPoseKeypointExtractor"
+    },
+    "5": {
+      "inputs": {
+        "draw_body": true,
+        "draw_face": true,
+        "draw_feet": true,
+        "draw_head": true,
+        "keypoints": [
+          "4",
+          0
+        ],
+        "draw_hands": true,
+        "stick_width": 4,
+        "face_point_size": 2,
+        "score_threshold": 0.3
+      },
+      "class_type": "SDPoseDrawKeypoints"
+    },
+    "6": {
+      "inputs": {
+        "fps": [
+          "2",
+          2
+        ],
+        "images": [
+          "5",
+          0
+        ]
+      },
+      "class_type": "CreateVideo"
+    },
+    "7": {
+      "inputs": {
+        "codec": "h264",
+        "video": [
+          "6",
+          0
+        ],
+        "format": "mp4"
+      },
+      "class_type": "SaveVideo"
+    }
+  },
+  "bindings": [
+    {
+      "input": "file",
+      "node_id": "1",
+      "asset_id": "slot_0"
+    }
+  ],
+  "output_node": "7"
+}

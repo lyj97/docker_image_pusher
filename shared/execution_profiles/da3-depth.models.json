@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "repo": "Comfy-Org/Depth-Anything-3",
+      "revision": "1aaeea516f22fb2f4c7fae761c8ed470c6cf9f93",
+      "source": "geometry_estimation/depth_anything_3_mono_large.safetensors",
+      "target": "geometry_estimation/depth_anything_3_mono_large.safetensors",
+      "bytes": 1336748056,
+      "sha256": "9b44eda5bedba5b4e125686fdb79d1db309c1b9785277576eb930f885b008f96"
+    }
+  ]
+}

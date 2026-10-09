@@ -123,7 +123,13 @@ def bind_graph(task, local_inputs, root, namespace):
             source = local_inputs['ref:' + asset]
             suffix = types.get(refs[asset].get('content_type'))
             if suffix is None:
-                raise ValueError('unsupported bound asset media type')
+                import mimetypes
+                content_type = str(refs[asset].get('content_type') or '')
+                if not content_type.startswith(('image/', 'video/', 'audio/')):
+                    raise ValueError('unsupported bound asset media type')
+                suffix = mimetypes.guess_extension(content_type) or '.bin'
+                if not re.fullmatch(r'\.[A-Za-z0-9]{1,12}', suffix):
+                    suffix = '.bin'
             name = f'asset_{index}{suffix}'
             with (folder / name).open('xb') as output, open(source, 'rb') as incoming:
                 shutil.copyfileobj(incoming, output)

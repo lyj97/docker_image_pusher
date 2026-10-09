@@ -81,13 +81,13 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
     if state and (state.get('request_digest') != digest(task) or state.get('generation') != remote.generation
                   or state.get('url') != remote.base):
         unresolved(worker, 'remote binding changed while execution is unresolved')
-    if task.get('references'):
+    if task_references(task):
         from .inputs import descriptors
         body['inputs'] = descriptors(task)
     if not state:
         resolved = dict(local_inputs)
-        if task.get('mode') == 'a2va':
-            resolved['ref:' + task['anchors']['first']['asset_id']] = resolved.pop('anchors.first', None)
+        for name, anchor in (task.get('anchors') or {}).items():
+            resolved['ref:' + anchor['asset_id']] = resolved.pop('anchors.' + name, None)
         if set(resolved) != {'ref:' + r['asset_id'] for r in task_references(task)} or any(v is None for v in resolved.values()):
             raise ValueError('cloud input resolution incomplete')
         state = {'remote': True, 'terminal': False, 'generation': remote.generation,
@@ -153,14 +153,16 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 if state['status'] != 'completed':
                     return False, {'code': 'ENGINE_FAILED', 'message': 'remote ' + state['status']}
                 artifact = view['artifact']
-                dest = Path(worker.config.attempt_dir(attempt_id)) / 'result.mp4'
+                name = 'result.wav' if task.get('mode')=='tts' else 'alignment.json' if task.get('mode')=='align' else 'result.mp4'
+                dest = Path(worker.config.attempt_dir(attempt_id)) / name
                 await asyncio.to_thread(remote.download, '/v1/executions/' + attempt_id + '/artifact',
                     dest, artifact['size_bytes'], artifact['sha256'], worker._transfer_should_abort)
                 if task.get('mode') == 'a2va':
                     from .media import original_soundtrack
                     await asyncio.to_thread(original_soundtrack, dest, local_inputs['ref:' + task['references'][0]['asset_id']], task, worker.config)
-                from .media import video_result
-                result = await asyncio.to_thread(video_result, dest, worker.config.ffprobe_path, task)
+                from .media import video_result, audio_result
+                result = (await asyncio.to_thread(audio_result,dest,task) if task.get('mode') in ('tts','align')
+                    else await asyncio.to_thread(video_result, dest, worker.config.ffprobe_path, task))
                 result.update(prompt_id=state['prompt_id'], workflow_digest=state['graph_digest'])
                 clear_quarantine(worker)
                 return True, result

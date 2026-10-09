@@ -44,3 +44,4 @@ for name, node in nodes.items():
 print(json.dumps({'baked_nodes':list(nodes),'models_downloaded':False}))
 
 shutil.copytree('/opt/h3-service/client/comfy_h3_contract_node', '/opt/comfyui-baked/custom_nodes/H3AVContract')
+shutil.copytree('/opt/h3-service/client/comfy_h3_reference_node', '/opt/comfyui-baked/custom_nodes/H3Reference')

@@ -106,8 +106,18 @@ class CloudExecutor(Worker):
         capabilities['cloud_state']['ready'] = any(p.get('ready') is True
             for p in capabilities['execution_profiles'])
         capabilities['cloud_state']['can_execute'] = bool(accepted)
-        if any(p.get('native_generation') and p['profile_digest'] in accepted for p in profiles()):
-            capabilities['models'].append('installed-model-revision');capabilities['modes'].append('a2va')
+        native_modes = {mode for p in profiles() if p['profile_digest'] in accepted
+                        if p['backend']=='comfyui'
+                        for mode in (p.get('native_modes') or (['a2va'] if p.get('native_generation') else []))}
+        if native_modes:
+            capabilities['models'].append('installed-model-revision')
+            capabilities['modes'].extend(sorted(native_modes))
+        for profile in profiles():
+            if profile['profile_digest'] in accepted and profile['backend']=='audio_cuda':
+                capabilities['models'].extend(profile['model_revisions'])
+                capabilities['modes'].extend(profile['native_modes'])
+        capabilities['models'] = sorted(set(capabilities['models']))
+        capabilities['modes'] = sorted(set(capabilities['modes']))
         if not accepted:
             capabilities.update(models=[],modes=[],execution_profiles=[])
             self.remote_ready = False
@@ -201,11 +211,16 @@ class CloudExecutor(Worker):
     def _remote_profile_metadata(self, task, result):
         from shared.execution import admitted_profiles
         profile = admitted_profiles(task)[0]
-        return {'engine':'comfyui', 'engine_version':profile['comfy_version'],
+        metadata = {'engine':'comfyui', 'engine_version':profile['comfy_version'],
             'execution_backend':'runpod', 'execution_profile':profile['profile_id'],
             'execution_profile_digest':profile['profile_digest'],
             'precision':profile.get('precision', 'H3 INT8 / Qwen NVFP4 AWQ / Turbo BF16'),
             'engine_prompt_id':result['prompt_id'], 'remote_graph_digest':result['workflow_digest']}
+        if profile['backend']=='audio_cuda':
+            from shared.cuda_audio import differences
+            metadata.update(engine=profile['audio_runtime']+'-cuda', engine_version=profile['upstream']['commit'],
+                audio_model_directory=profile['model_directory'], backend_differences=differences(task,profile))
+        return metadata
 
     async def _run_engine(self, attempt_id, lease_token, task_request, local_inputs):
         return await remote_runner.run(self, attempt_id, lease_token, task_request, local_inputs)

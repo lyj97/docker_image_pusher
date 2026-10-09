@@ -1,0 +1,86 @@
+{
+  "graph": {
+    "1": {
+      "inputs": {
+        "file": null
+      },
+      "class_type": "LoadVideo"
+    },
+    "2": {
+      "inputs": {
+        "video": [
+          "1",
+          0
+        ]
+      },
+      "class_type": "GetVideoComponents"
+    },
+    "3": {
+      "inputs": {
+        "model_name": "depth_anything_3_mono_large.safetensors",
+        "weight_dtype": "default"
+      },
+      "class_type": "LoadDA3Model"
+    },
+    "4": {
+      "inputs": {
+        "mode": "mono",
+        "image": [
+          "2",
+          0
+        ],
+        "da3_model": [
+          "3",
+          0
+        ],
+        "resolution": 280,
+        "resize_method": "upper_bound_resize"
+      },
+      "class_type": "DA3Inference"
+    },
+    "5": {
+      "inputs": {
+        "output": "depth",
+        "da3_geometry": [
+          "4",
+          0
+        ],
+        "output.normalization": "v2_style",
+        "output.apply_sky_clip": false
+      },
+      "class_type": "DA3Render"
+    },
+    "6": {
+      "inputs": {
+        "fps": [
+          "2",
+          2
+        ],
+        "images": [
+          "5",
+          0
+        ]
+      },
+      "class_type": "CreateVideo"
+    },
+    "7": {
+      "inputs": {
+        "codec": "h264",
+        "video": [
+          "6",
+          0
+        ],
+        "format": "mp4"
+      },
+      "class_type": "SaveVideo"
+    }
+  },
+  "bindings": [
+    {
+      "input": "file",
+      "node_id": "1",
+      "asset_id": "slot_0"
+    }
+  ],
+  "output_node": "7"
+}

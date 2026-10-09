@@ -70,7 +70,33 @@ def profiles():
     audio['profile_digest'] = digest({k: audio[k] for k in ('profile_id', 'backend', 'gpu_vendor',
         'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template',
         'native_generation', 'models', 'nodes', 'variable_inputs', 'input_slots')})
-    return (profile, lan, audio)
+    native_source = Path(__file__).with_name('cuda_h3.py')
+    reference_source = adapter.parents[1] / 'comfy_h3_reference_node/__init__.py'
+    native = dict(audio, profile_id='h3-native-int8-cu130-v1',
+        label='H3 CUDA INT8 · 文本 / 首尾帧 / 给定音频 · 参数化',
+        native_modes=['t2va', 'fl2va', 'a2va'], parameterized_native=True,
+        validation='沿用已实测 A2VA 的运行环境；参数化与新增模式尚待 GPU 验收',
+        runtime_sources={'shared/cuda_h3.py': hashlib.sha256(native_source.read_bytes()).hexdigest()})
+    native.pop('native_generation')
+    ref = dict(native, profile_id='h3-reference-int8-cu130-v1',
+        label='H3 CUDA INT8 · 多参考图 / 视频 / 音频 · 参数化', native_modes=['ref2va'],
+        models=copy.deepcopy(audio['models']),
+        runtime_sources=dict(native['runtime_sources'], **{
+            'client/comfy_h3_reference_node/__init__.py': hashlib.sha256(reference_source.read_bytes()).hexdigest()}))
+    ref['models']['models'][0].update(
+        source='diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+        target='diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors',
+        sha256='9255f52b6677845ad238f20dfaafa94727053694127ab7f255c048f0f9365779')
+    ref['workflow_template'] = copy.deepcopy(audio['workflow_template'])
+    ref['workflow_template']['graph']['1']['inputs']['unet_name'] = 'minimax_h3_ref2va_pruned_int8_convrot.safetensors'
+    for p in (native, ref):
+        p['models_digest'] = digest(p['models'])
+        p['profile_digest'] = digest({k:p[k] for k in ('profile_id', 'backend', 'gpu_vendor',
+            'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template', 'models',
+            'nodes', 'native_modes', 'parameterized_native', 'runtime_sources')})
+    from .comfy_variants import variants
+    from .cuda_audio import profiles as audio_profiles
+    return (profile, lan, audio, native, ref, *variants(profile), *audio_profiles(profile))
 
 
 def profile_by_id(identity):
@@ -81,18 +107,35 @@ def generation_specification(task):
     matches = matching_profiles(task)
     if len(matches) != 1:
         raise ValueError('task has no unique reviewed execution profile')
-    workflow = execution_workflow(task, matches[0])
-    return workflow['graph'][matches[0]['generation_node']]['inputs']
+    p = matches[0]
+    workflow = execution_workflow(task, p)
+    contract = p.get('output_contract') or {}
+    if 'inherit_reference' in contract:
+        reference = task['references'][contract['inherit_reference']]
+        facts = (task.get('_runpod_media') or {}).get(reference['asset_id']) or {}
+        if facts.get('sha256') != reference.get('sha256'):
+            facts = {}
+        return dict(width=facts.get('width'), height=facts.get('height'), length=facts.get('frames'),
+                    fps=facts.get('fps'), audio=contract['audio'])
+    specification = dict(workflow['graph'][p['generation_node']]['inputs'])
+    specification.update(fps=workflow['graph'][contract['fps_node']]['inputs']['fps'] if contract else 24,
+                         audio=contract.get('audio', 'required'))
+    return specification
 
 
 def task_references(task):
     refs = list(task.get('references') or [])
-    if task.get('mode') == 'a2va' and (task.get('anchors') or {}).get('first'):
-        refs.append(dict(task['anchors']['first'], kind='image'))
+    for name in ('first', 'last'):
+        if (task.get('anchors') or {}).get(name):
+            refs.append(dict(task['anchors'][name], kind='image'))
     return refs
 
 
 def execution_workflow(task, profile=None):
+    profile = profile or next(iter(matching_profiles(task)), None)
+    if profile and profile.get('parameterized_native'):
+        from .cuda_h3 import workflow
+        return workflow(task, profile)
     if task.get('mode') != 'a2va':
         workflow = copy.deepcopy(task['workflow'])
         profile = profile or next(iter(matching_profiles(task)), None)
@@ -139,10 +182,21 @@ def _native_matches(task, profile):
 
 
 def _matches(task, profile):
+    if profile['backend'] == 'audio_cuda':
+        from .cuda_audio import compatible
+        return compatible(task, profile)
+    if profile.get('parameterized_native'):
+        from .cuda_h3 import compatible
+        # Keep the already deployed exact A2VA profile unambiguous.
+        if task.get('mode') == 'a2va' and _native_matches(task, profiles()[2]):
+            return False
+        return compatible(task, profile)
     if profile.get('native_generation'):
         return _native_matches(task, profile)
     from .comfy_policy import validate
-    if validate(task) or task.get('_native') or task.get('anchors'):
+    from .comfy_variants import policy_copy, valid_parameter
+    policy_task = policy_copy(task, profile) if profile.get('flexible_media') else task
+    if validate(policy_task, _registered=False) or task.get('_native') or task.get('anchors'):
         return False
     workflow = copy.deepcopy(task.get('workflow'))
     if not isinstance(workflow, dict):
@@ -157,19 +211,27 @@ def _matches(task, profile):
         if len(set(ids)) != len(ids):
             return False
         for ref, slot in zip(refs, profile['input_slots']):
-            if (ref.get('kind'), ref.get('content_type')) != tuple(slot):
+            if profile.get('flexible_media'):
+                if ref.get('kind') != slot[0] or not str(ref.get('content_type', '')).startswith(slot[0] + '/'):
+                    return False
+            elif (ref.get('kind'), ref.get('content_type')) != tuple(slot):
                 return False
         for binding in workflow['bindings']:
             binding['asset_id'] = 'slot_' + str(ids.index(binding['asset_id']))
         for node_id, key, kind in profile['variable_inputs']:
             value = workflow['graph'][node_id]['inputs'][key]
-            if kind == 'text':
+            if profile.get('flexible_media'):
+                if not valid_parameter(value, kind):
+                    return False
+            elif kind == 'text':
                 if not isinstance(value, str) or len(value.encode()) > 16384:
                     return False
             elif type(value) is not int or not 0 <= value <= 2**64 - 1:
                 return False
             workflow['graph'][node_id]['inputs'][key] = profile['workflow_template']['graph'][node_id]['inputs'][key]
-        return workflow == profile['workflow_template']
+        if workflow != profile['workflow_template']:
+            return False
+        return True
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -177,15 +239,25 @@ def _matches(task, profile):
 def matching_profiles(task):
     if isinstance(task, str):
         task = json.loads(task)
-    if not isinstance(task, dict) or task.get('mode') not in ('comfyui_video', 'a2va'):
+    if not isinstance(task, dict) or task.get('mode') not in ('comfyui_video', 't2va', 'fl2va', 'ref2va', 'a2va', 'tts', 'align'):
         return ()
     return tuple(p for p in profiles() if _matches(task, p))
+
+
+def policy_view(task):
+    """Only registered fixed prompt sockets receive business text semantics."""
+    from .comfy_variants import policy_copy
+    try:
+        match = next((p for p in matching_profiles(task) if p.get('flexible_media')), None)
+        return policy_copy(task, match) if match else task
+    except (KeyError, TypeError, ValueError):
+        return task
 
 
 def requirements_snapshot(task):
     """Server-owned immutable admission snapshot; never trust a caller's copy."""
     from .runpod_media import lanpaint_error
-    return {'schema_version': 1, 'backend': 'comfyui',
+    return {'schema_version': 1, 'backend': 'audio_cuda' if task.get('mode') in ('tts','align') else 'comfyui',
             'profile_digests': [p['profile_digest'] for p in matching_profiles(task)
                 if not p.get('runtime_adapter') or lanpaint_error(task) is None]}
 
@@ -255,13 +327,13 @@ def advice(raw, *, config=None):
     if task.get('_native') or (task.get('generation') or {}).get('use_int8_row_fc2'):
         result.update(status='local_only', label='保留本地执行',
             reasons=['任务绑定原生节点或 M5 优化，不能直接替换为 CUDA 工作流。'])
-    elif mode in ('tts', 'align'):
+    elif mode in ('tts', 'align') and not matching_profiles(task):
         result.update(status='needs_adapter', label='需适配 CUDA 运行器',
             reasons=['现有音频执行配置使用 MLX；NVIDIA 需要单独的运行器和模型兼容验证。'])
-    elif mode in ('t2va', 'fl2va', 'ref2va') or mode == 'a2va' and not matching_profiles(task):
+    elif mode in ('t2va', 'fl2va', 'ref2va', 'a2va') and not matching_profiles(task):
         result.update(status='needs_adapter', label='需核对原生执行配置',
             reasons=['原生任务没有经验证的等价 CUDA 执行配置；不能自动更换精度或工作流。'])
-    elif mode in ('comfyui_video', 'a2va'):
+    elif mode in ('comfyui_video', 't2va', 'fl2va', 'ref2va', 'a2va', 'tts', 'align'):
         matches = matching_profiles(task)
         if not matches:
             result.update(status='needs_review', label='需核对模型与节点',
@@ -290,6 +362,10 @@ def advice(raw, *, config=None):
                     recommendation='在服务侧核对素材媒体信息后再考虑开机；不会自动转换素材。')
             if mode == 'a2va':
                 result['reasons'].append('CUDA INT8 和音频 guide 不等于 Mac 原生算法或精度；须明确批准独立配置。')
+            if profile['backend']=='audio_cuda':
+                from .cuda_audio import differences
+                result['backend_differences'] = differences(task,profile)
+                result['reasons'].extend(result['backend_differences'])
             if not admitted:
                 result['reasons'].append('历史任务没有对应的入队需求快照，当前不会被云端认领；需按新契约重新提交。')
             if not enabled:

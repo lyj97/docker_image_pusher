@@ -144,10 +144,12 @@ class Pod:
             if self.uploads or self.active() or not self.engine.empty():
                 raise Refused('exclusive_slot_busy')
             prompt = str(uuid.uuid4())
-            execution_task = dict(task, workflow=execution_workflow(task, matches[0]), references=task_references(task))
+            audio = matches[0]['backend'] == 'audio_cuda'
+            execution_task = dict(task, references=task_references(task))
+            if not audio:execution_task['workflow'] = execution_workflow(task, matches[0])
             record = {'execution_id': execution, 'generation': self.generation,
                 'request_digest': request_digest, 'prompt_id': prompt, 'state': 'submitting',
-                'terminal': False, 'task': task, 'graph_digest': digest(execution_task['workflow']['graph']),
+                'terminal': False, 'task': task, 'graph_digest': digest(task if audio else execution_task['workflow']['graph']),
                 'acceptance': acceptance, 'runtime_digest': digest({k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')}),
                 'runtime_proof':{k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')},
                 'cancel_requested': False, 'started_at': time.time(), 'submission_started': False}
@@ -157,7 +159,11 @@ class Pod:
             with self.db:
                 self.db.execute('DELETE FROM pending_input WHERE owner=?',(execution,))
             try:
-                if execution_task.get('references'):
+                if audio:
+                    from .inputs import paths
+                    graph = {'_audio':{'profile_id':matches[0]['profile_id'], 'task':task,
+                        'inputs':{k:str(v) for k,v in paths(self,task,body.get('inputs',{})).items()}}}
+                elif execution_task.get('references'):
                     from .inputs import paths
                     from h3worker.comfy_runner import bind_graph
                     graph = bind_graph(execution_task, paths(self, task, body.get('inputs', {})),
@@ -318,6 +324,8 @@ class Pod:
                     (not folder.is_dir() or any(p.is_symlink() for p in folder.rglob('*')))):
                 raise Refused('unsafe_release_path')
             if folder.exists():shutil.rmtree(folder)
+            if record.get('task',{}).get('mode') in ('tts','align'):
+                self.engine.audio.release(record['prompt_id'])
             # New uploads reserve a SHA before binding; don't delete their receipt.
             protected = {r[0] for r in self.db.execute('SELECT sha FROM pending_input WHERE owner != ?',(execution,))}
             for row in self.db.execute('SELECT record FROM execution WHERE id != ?', (execution,)):
