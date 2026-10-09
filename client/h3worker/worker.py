@@ -3827,6 +3827,18 @@ class Worker:
         if state and not state.get('terminal'):
             comfy.quarantine(self, 'ComfyUI cancellation unresolved; automatic reconciliation pending')
             return
+        record = self.journal.get_attempt(attempt_id)
+        if (record.get("finish_request_id") and record.get("finish_payload")
+                and (self.lease_lost.is_set() or not self.cancel_requested.is_set())):
+            # A terminal heartbeat may race a lost accepted finish reply.
+            resolution = await self._reconcile_remote(attempt_id, record["finish_request_id"])
+            if resolution == "OURS":
+                self.monitor.end_attempt(record["finish_payload"]["status"])
+                return
+            if resolution in ("RUNNING", "UNREACHABLE", "UNSETTLED"):
+                self._defer_recovery(attempt_id, "finish confirmation pending after local stop")
+                self.monitor.end_attempt("STOPPED")
+                return
         if self.lease_lost.is_set() or not self.cancel_requested.is_set():
             if _shutdown_requested(self) and not self.lease_lost.is_set():
                 self._defer_recovery(attempt_id, "worker shutdown")

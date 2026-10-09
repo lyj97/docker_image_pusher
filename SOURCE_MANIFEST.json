@@ -4,8 +4,8 @@
     "burst/h3burst/__init__.py": "ace3344a2b9201fd507b2a2b3bed7ae266dce9f7d6d7e9496736be916d58df37",
     "burst/h3burst/acceptance.py": "788b58d3840007fec4e5dceb3eaa906cb05f0857146079a1fc6470c505be81d5",
     "burst/h3burst/control.py": "85f02a7d7c075e64f1f4dd4aa7a3e2c8656a909a4182ecd6c5ab00759ade90bb",
-    "burst/h3burst/engine.py": "33d4ed74cc57b2cf6ee1e9d910b0b898a8e7ce01037ea7e1d1c671699ac7c8eb",
-    "burst/h3burst/executor.py": "6460c4558ec2d9aa62d7724346ed9f1299613c273dd22ea27ce10e6315d7c533",
+    "burst/h3burst/engine.py": "0344eb250857b9b318c3a59af1658e0d20ad90276e9c9e98ef07749fc9dbe6a7",
+    "burst/h3burst/executor.py": "6c1fadf375d13dcb28875c168efdc47e4b3a7e42cf52c4228710442251a320e7",
     "burst/h3burst/inputs.py": "1929a627e259af55735008c5a5c8a565ce678ec0b5da876d722ce0773694c740",
     "burst/h3burst/media.py": "cfa9a6bca9fa8aceb564bfa6f7e3db59af4d3d52e44ce27000ea670c87e2a9ab",
     "burst/h3burst/observe.py": "a5b72f0aed73a7acfd2cee5c1463a6f8073d6ee1265bd4cbd5e44b6397b79d78",
@@ -45,7 +45,7 @@
     "client/h3worker/status.py": "d225b730ddf85bb1c92f452d7cf31e5e77b394b827ed1dd43a00ac914dd4a69d",
     "client/h3worker/tts_runner.py": "0af395aa7664c0ef926628b312f4ddefd26c23143dd544bdb9d89cffbf908983",
     "client/h3worker/upgrade.py": "787ed9a3eb934b7a4ec10bcc50501f6055daade036340a11003bd2da13c6285b",
-    "client/h3worker/worker.py": "78af469ea50c67ffc8a6b5561e21f11799d0484b76c0f2d28df29fa045366de9",
+    "client/h3worker/worker.py": "2d5a879d8ec8bda7a74cfed403f81fd47b638d882ca05bb84abb3768706ce8b6",
     "client/vace_reconcile.py": "dd739aae140a8dff834abc814f163756c98fc8f1e9afc6157567998b39f6a12e",
     "client/vace_smoke.py": "c0fd0a7f5936507cf6edd46735358b32075d0b168b4ad23554daa931cb7109a0",
     "deploy/runpod/Dockerfile": "0eed360a7e4b67387854f9fe5df843c0820670774223bf7747b265dfea324f57",
@@ -71,5 +71,5 @@
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5"
   },
-  "source_revision": "a4816c122d039260b1501412cf4bdd42ac6caabe"
+  "source_revision": "e51082ae28cf57e82e6dd00de04e1b40c0f44637"
 }

@@ -1,4 +1,5 @@
 """Private pinned ComfyUI runtime and supervised, streaming model preparation."""
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 from contextlib import asynccontextmanager
 import json
@@ -114,7 +115,9 @@ class Engine:
     def download_models(self, profile, log, progress, started):
         models = profile['models']['models']
         missing = [m for m in models if self.verified_models.get(m['target']) != (m['sha256'],m['bytes'])]
-        for model in missing:
+        progress_lock = threading.Lock()
+        active = {}
+        def download(model):
             path = self.comfy_root / 'models' / model['target']
             safe_root(path)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,16 +131,28 @@ class Engine:
                     size += len(chunk)
                     if size > model['bytes']:raise RuntimeError('model exceeds pinned size')
                     h.update(chunk);dest.write(chunk)
-                    atomic_json(progress, {'state':'preparing','profile_digest':profile['profile_digest'],
-                        'model':model['target'],'bytes':size,'total_bytes':model['bytes'],
-                        'last_progress_at':time.time()})
+                    with progress_lock:
+                        active[model['target']] = {'bytes':size,'total_bytes':model['bytes']}
+                        atomic_json(progress, {'state':'preparing','profile_digest':profile['profile_digest'],
+                            'model':model['target'],'bytes':size,'total_bytes':model['bytes'],
+                            'models':dict(active),'last_progress_at':time.time()})
                 dest.flush();os.fsync(dest.fileno())
             if size != model['bytes'] or h.hexdigest() != model['sha256']:
                 raise RuntimeError('model download integrity failure')
             os.replace(part,path)
-            self.verified_models[model['target']] = (model['sha256'],model['bytes'])
-            log.write((json.dumps({'profile_digest':profile['profile_digest'], 'model':model['target'],
-                'bytes':size,'seconds':time.monotonic()-at,'streaming_sha256':h.hexdigest()})+'\n').encode())
+            with progress_lock:
+                self.verified_models[model['target']] = (model['sha256'],model['bytes'])
+                log.write((json.dumps({'profile_digest':profile['profile_digest'], 'model':model['target'],
+                    'bytes':size,'seconds':time.monotonic()-at,'streaming_sha256':h.hexdigest()})+'\n').encode())
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix='h3-model-download') as pool:
+            futures = [pool.submit(download, model) for model in missing]
+            try:
+                for future in as_completed(futures):future.result()
+            except Exception:
+                self.error = True
+                self.stop_preparation.set()
+                for future in futures:future.cancel()
+                raise
 
     def request_drain(self):
         self.stop_preparation.set()

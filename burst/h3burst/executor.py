@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 from pathlib import Path
+import subprocess
+import tempfile
 import time
 
 from h3worker.config import WorkerConfig
@@ -175,9 +177,37 @@ class CloudExecutor(Worker):
         pass
 
 
+def check_config(worker):
+    """Explicit preboot deployment check; never registers, claims or contacts a Pod."""
+    cfg = worker.config
+    if cfg.worker_token == 'worker-token':
+        raise ValueError('existing H3 Worker credential required')
+    if not worker.approved_profiles or not set(worker.approved_profiles) <= {
+            p['profile_digest'] for p in profiles()}:
+        raise ValueError('binding uses unknown execution profiles')
+    cfg.ensure_dirs()
+    worker._acquire_singleton_lock()
+    try:
+        node = worker.journal.get_node()
+        if node and node['worker_id'] != cfg.worker_id:
+            raise ValueError('journal belongs to another Worker')
+        with tempfile.TemporaryFile(dir=cfg.data_dir) as probe:
+            probe.write(b'preboot');probe.flush();os.fsync(probe.fileno())
+        worker.journal.conn.execute('BEGIN IMMEDIATE')
+        worker.journal.conn.rollback()
+        for binary in (cfg.ffprobe_path or 'ffprobe', cfg.ffmpeg_path or 'ffmpeg'):
+            subprocess.run([binary, '-version'], check=True, capture_output=True)
+        return {'check_config': 'passed', 'worker_id': cfg.worker_id,
+                'uid': os.geteuid(), 'pod_contacted': False, 'task_claimed': False}
+    finally:
+        worker._lock_fh.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binding', type=Path, required=True)
+    parser.add_argument('--check-config', action='store_true',
+                        help='check deployment as the service user before Pod startup, then exit')
     args = parser.parse_args()
     binding = json.loads(args.binding.read_text())
     # Binding is operator-owned nonsecret config; no task-supplied URLs/repos.
@@ -187,6 +217,12 @@ def main():
     remote = Transport(binding['pod_url'], os.environ['H3BURST_POD_TOKEN'], binding['generation'])
     worker = CloudExecutor(cfg, remote, binding['approved_profiles'],
                            first_task_validation=binding.get('first_task_validation', False))
+    if args.check_config:
+        try:
+            print(json.dumps(check_config(worker)))
+        finally:
+            worker.journal.close()
+        return
     asyncio.run(worker.run())
 
 
