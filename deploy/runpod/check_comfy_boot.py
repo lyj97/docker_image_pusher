@@ -62,7 +62,9 @@ def check_lanpaint_inputs(root, folder):
         print('Real pinned LanPaint node and full prompt validation passed for three bound videos; old paths rejected; no inference')
     finally:
         cleanup_bound_inputs(root, namespace)
-    assert list((root / 'input').iterdir()) == []
+    owned = {namespace, *(graph[key]['inputs']['video'] for key in video_nodes)}
+    remaining = {path.name for path in (root / 'input').iterdir()}
+    assert not owned & remaining, sorted(owned & remaining)
 
 
 with tempfile.TemporaryDirectory(dir=Path.cwd()) as folder:

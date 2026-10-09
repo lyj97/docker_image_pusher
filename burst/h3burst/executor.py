@@ -118,14 +118,26 @@ class CloudExecutor(Worker):
         from .control import H3Control
         try:
             monitor = H3Control(self.config.server_url,self.config.worker_id)
-            view = await asyncio.to_thread(monitor.request,'/v1/monitor')
             known = {p['profile_digest'] for p in profiles()}
             requested = []
-            for task in view.get('tasks',[]):
-                advice = task.get('execution_advice') or {}
-                if task.get('status') != 'QUEUED' or not advice.get('admission_snapshot') or advice.get('execution_target') == 'local':continue
-                for identity in advice.get('profile_digests',[]):
-                    if identity in known and identity not in requested:requested.append(identity)
+            page = 1
+            while True:
+                view = await asyncio.to_thread(monitor.request,
+                    f'/v1/monitor?status=QUEUED&task_page={page}&task_page_size=200')
+                for task in view.get('tasks', []):
+                    advice = task.get('execution_advice') or {}
+                    if (task.get('status') != 'QUEUED' or not advice.get('admission_snapshot')
+                            or advice.get('execution_target') == 'local'):
+                        continue
+                    for identity in advice.get('profile_digests', []):
+                        if identity in known and identity not in requested:
+                            requested.append(identity)
+                pagination = view.get('task_pagination')
+                if (len(requested) == len(known) or not pagination
+                        or pagination['page'] != page
+                        or page * pagination['page_size'] >= pagination['total']):
+                    break
+                page += 1
             if requested:
                 await asyncio.to_thread(self.remote.json,'/v1/prepare',{'profile_digests':requested})
         except Exception:

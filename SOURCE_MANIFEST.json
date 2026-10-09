@@ -5,7 +5,7 @@
     "burst/h3burst/acceptance.py": "788b58d3840007fec4e5dceb3eaa906cb05f0857146079a1fc6470c505be81d5",
     "burst/h3burst/control.py": "0d368c0a353fa5c6b5ce4da754333caff452ccc61ea6e8151c73a94256195fd1",
     "burst/h3burst/engine.py": "0344eb250857b9b318c3a59af1658e0d20ad90276e9c9e98ef07749fc9dbe6a7",
-    "burst/h3burst/executor.py": "14199e2ea85041612c4be14265bec79130fec1c4d83b7c5dfb0c524f41d3f5a6",
+    "burst/h3burst/executor.py": "2030f81f7510b3044a5f7cbaf7a7cf68fdd133dc01ccf9151029961947802d5e",
     "burst/h3burst/failure.py": "577c33e2fbc018a783d2a3ab0580580088ea08d15eb4b2f9be85edb3fed2f910",
     "burst/h3burst/inputs.py": "1929a627e259af55735008c5a5c8a565ce678ec0b5da876d722ce0773694c740",
     "burst/h3burst/media.py": "cfa9a6bca9fa8aceb564bfa6f7e3db59af4d3d52e44ce27000ea670c87e2a9ab",
@@ -52,7 +52,7 @@
     "deploy/runpod/Dockerfile": "0eed360a7e4b67387854f9fe5df843c0820670774223bf7747b265dfea324f57",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
     "deploy/runpod/build_nodes.py": "217495860f3282e69fba69d8c60fb95c1915e110abceec0338d0f2189c878277",
-    "deploy/runpod/check_comfy_boot.py": "6afd1122d62a78a11c3cfc8f2d631f4a68f6b0b510068e22353ec589c445a913",
+    "deploy/runpod/check_comfy_boot.py": "d6542b5f1f03c4670954514fcb51dab1dd1e38a72f1484681ef7efcd29a8432c",
     "deploy/runpod/check_image.py": "0101680251cef743c9f6e84d68db076552f86421aa3e6c79eca9eade515f9806",
     "deploy/runpod/check_ssh.py": "c6c302d9d32d11b0a4c77cb6254412db1beca8711a56200ae0f03f47016d1076",
     "deploy/runpod/start-ssh.sh": "fa767e1789c6bfd996b8dff81a6c7e6f034300cf65e8992130dc338f08c3f60e",
@@ -72,5 +72,5 @@
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5"
   },
-  "source_revision": "a755819b8ca062b65542a0119d5f592c184e449e"
+  "source_revision": "1df285ba844ab1d17607e9f1028292e51ccc3eba"
 }
