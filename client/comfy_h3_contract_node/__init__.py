@@ -18,8 +18,8 @@ class H3AVMaskPrepare:
             raise ValueError("unexpected H3 AV latent/mask layout")
         if audio_mask.ndim == 2 and audio_mask.shape[1] == 1:
             audio_mask = audio_mask[:, 0]
-        if audio_mask.ndim != 1 or audio_mask.shape[0] != video_mask.shape[0]:
-            raise ValueError("audio/video masks must share the frame timeline")
+        if audio_mask.ndim != 1 or any(size <= 0 for size in (*video_mask.shape, *audio_mask.shape)):
+            raise ValueError("audio/video masks must have nonempty supported layouts")
         # Preserve the existing stock video's trilinear mask preparation.
         vm = prepare_mask(video_mask, video.shape, video.device)
         am = torch.nn.functional.interpolate(audio_mask.float().reshape(1, 1, -1),

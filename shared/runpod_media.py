@@ -1,4 +1,4 @@
-"""Fixed LanPaint media contract, evaluated before paid compute; no conversion."""
+"""Optional media observations; runtime nodes determine input compatibility."""
 from fractions import Fraction
 import json
 import math
@@ -27,33 +27,11 @@ def probe(path, command="ffprobe"):
 
 
 def lanpaint_error(task):
+    """Advisory only: upstream operates on actual inputs, not benchmark dimensions."""
     facts = task.get("_runpod_media") or {}
     refs = task.get("references") or []
-    if len(refs) != 4:
-        return "LanPaint需要四份已核对素材"
-    for i, ref in enumerate(refs):
-        f = facts.get(ref["asset_id"], {})
-        if f.get("sha256") != ref.get("sha256"):
-            return "素材媒体信息缺失或与服务器对象身份不符，须在开机前核对"
-        if f.get("width") != 256 or f.get("height") != 256:
-            return "当前LanPaint配置要求所有素材为256×256，不会自动缩放素材"
-        if i == 1:
-            continue
-        try:
-            if f.get("frames") != 39 or Fraction(f.get("fps", "0")) != 24 or Fraction(f.get("r_fps", "0")) != 24:
-                return "当前LanPaint视频素材须为39帧、24fps，时间轴必须一致"
-            start = float(f["start"])
-            if not math.isfinite(start) or abs(start) > 1 / 24:
-                return "LanPaint素材视频需要从统一零点开始"
-            duration = float(f["duration"])
-            if not math.isfinite(duration) or abs(duration - 39 / 24) > 1 / 24:
-                return "LanPaint视频时间轴不符合39帧、24fps"
-            if i == 3 or (i == 0 and f.get("has_audio")):
-                ad = float(f.get("audio_duration", 0))
-                audio_start = float(f.get("audio_start", 0))
-                if (not f.get("has_audio") or not math.isfinite(ad) or abs(ad - duration) > 1 / 24
-                        or not math.isfinite(audio_start) or abs(audio_start - start) > 1 / 24):
-                    return "LanPaint编码视频必须有音轨；存在的源音轨须与视频时间轴一致"
-        except (ValueError, TypeError, KeyError, ZeroDivisionError):
-            return "素材媒体元数据无效，须在开机前核对"
+    if any((facts.get(r["asset_id"]) or {}).get("sha256") != r.get("sha256") for r in refs):
+        return "部分素材媒体信息未取得；将使用实际素材执行，节点可能报告格式或音轨错误。"
+    if len(refs) > 3 and not facts[refs[3]["asset_id"]].get("has_audio"):
+        return "编码视频未探测到音轨；仍尝试实际节点，AVEncode可能报告缺少音轨。"
     return None

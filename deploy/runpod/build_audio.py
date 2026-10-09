@@ -15,7 +15,7 @@ REQUIREMENTS = {
     # Matcha's fixed decoder imports diffusers and its logger imports lightning.
     'cosyvoice3': ['transformers==4.51.3','onnxruntime-gpu==1.30.0','conformer==0.3.2',
         'diffusers==0.35.1','HyperPyYAML==1.2.3','inflect==7.3.1','librosa==0.10.2',
-        'lightning==2.2.4','modelscope==1.40.2','omegaconf==2.3.0','openai-whisper==20231117',
+        'lightning==2.2.4','modelscope==1.40.2','omegaconf==2.3.0','openai-whisper==20250625',
         'soundfile==0.12.1','x-transformers==2.11.24','wetext==0.1.8'],
 }
 MATCHA = 'dd9105b34bf2be2230f4aa1e4769fb586a3c824e'

@@ -19,7 +19,7 @@
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
     "burst/h3burst/transport.py": "18d8481912e984a8428373a53ccc94926ee13df70ce87cdc8b14353bf0bba0c4",
     "burst/h3burst/wait_capacity.py": "c0208c76018203140417acb0739b78e9fc0355d7dee3623ad8d88e9fc07f7747",
-    "client/comfy_h3_contract_node/__init__.py": "a7a97aadcd31261cd82af0951a2f6276dd1588c77926bcd6ce5c10e1317c0529",
+    "client/comfy_h3_contract_node/__init__.py": "56cfaa21cbdd638f335e45731a72b1b12f4abf17dcb9348d0878fefe84dc83d7",
     "client/comfy_h3_reference_node/__init__.py": "3aba34c6c95fccc6549d4f0763756a32c6235532982ca23e571f21a07be8d2db",
     "client/h3worker/__init__.py": "48b5b19170bab9a8c726205d3ddb20ddebbcb7a6fcb9dbab2bd9507d87efe34b",
     "client/h3worker/__main__.py": "5d86534aa1471428397102d0b8397c3d3d3a21790d7baeb13acb8c0836430e4c",
@@ -55,7 +55,7 @@
     "client/vace_smoke.py": "c0fd0a7f5936507cf6edd46735358b32075d0b168b4ad23554daa931cb7109a0",
     "deploy/runpod/Dockerfile": "79940692120e5ce3391de7c18ef59025a8c37e185599001294ab7be2b24735f8",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
-    "deploy/runpod/build_audio.py": "ba05a39e12e15db7ab6285b3b2f8173834dce4975e89d1efe9c511cc94801998",
+    "deploy/runpod/build_audio.py": "0873da4aed10288e54027fef2f9711d56da183c1948b3cfb91905aed36b098ea",
     "deploy/runpod/build_nodes.py": "75930729a2f13b16e46b73f26ccfade01420f58d8207d0bfaa585c279c78e423",
     "deploy/runpod/check_audio.py": "8cf0046d24a3a73793c2b481a3ca96d9c01836116bd19d096f29211b98acb41d",
     "deploy/runpod/check_comfy_boot.py": "50eb199f65c80fec841e424a950729175ac64227fa2740ad557c3b9b74c3f5e5",
@@ -70,8 +70,8 @@
     "shared/comfy_workflow.py": "61fc1c7b289e0848961714d9caec22566e518e099a74290782d6d2765533f0e2",
     "shared/cuda_audio.py": "91dfe21c668caaa936da3291bc511e1ffd0b67c634a836eaf083b3b303e9ec01",
     "shared/cuda_h3.py": "c77e5df5520cf42a7c318d3df84f48fc2ab434e0faf1e523b44ac8889b9b4d14",
-    "shared/execution.py": "21e3e6eec4305136d2ad396891d9e35bb5a7a2586e0fc6fb347ac36310cfb75e",
-    "shared/execution_profiles/audio-runtime.sources.json": "c706ec40038d6d22a987182c9ba2eeabb7c94bf211e32325f56900203e1a7f80",
+    "shared/execution.py": "d8377968c4961804ceb8115e931f5a06d6d7b934f746016f0dfe070993cb87b8",
+    "shared/execution_profiles/audio-runtime.sources.json": "24bb3c17815cb54d511f515c4bc4c4d734633b7eaa03f5ab1e985f5db2ded352",
     "shared/execution_profiles/cosyvoice3.models.json": "cbf49ed8b53e96987b5ea4d17ae68cbf2cb1ce94afbd2137f50dfc81b4a484a8",
     "shared/execution_profiles/da3-depth.models.json": "f24c1ab8edf7b2d631a1a15acac3d677aab62364a3348020ff2f87eb970fc2db",
     "shared/execution_profiles/da3-depth.workflow.json": "426a0b7aab6a64da45e2eeb3a1348992bc569901f988f3f632f34458175a23dc",
@@ -94,7 +94,7 @@
     "shared/execution_profiles/vace-joiner.workflow.json": "19c6440c3abd442b4699015feee0703bd750788806f3db9daa5f4e2bd8dc12ff",
     "shared/h3proto.py": "9762474aa5ec415be11ad5d8bc96936441439f9242d8588d75780ebd57a6e781",
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5",
-    "shared/runpod_media.py": "9fcb67b6071d423f5a211509b54b4b60034c90080e928cf22e207165c9b68376"
+    "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "3dd9d73e778fa092523c46fc7dcb7170be3a4fa4"
+  "source_revision": "1464e748513633656b1e384c7caf00eeb8fe1726"
 }

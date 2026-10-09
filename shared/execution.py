@@ -43,7 +43,7 @@ def profiles():
         workflow_template=json.loads((root / 'h3-lanpaint-256.workflow.json').read_text()),
         models=json.loads((root / 'h3-lanpaint.models.json').read_text()),
         variable_inputs=[['5', 'prompt', 'text'], ['6', 'noise_seed', 'seed']],
-        generation_node='5', input_slots=[('video', 'video/mp4'), ('image', 'image/png'),
+        generation_node='5', output_contract={'inherit_reference': 0, 'audio': 'required', 'variable_length': True}, input_slots=[('video', 'video/mp4'), ('image', 'image/png'),
             ('video', 'video/mp4'), ('video', 'video/mp4')],
         validation='同图已在 Mac 生成；CUDA 0.39 须完成实例功能验证',
         precision='H3 INT8 convrot / Qwen NVFP4 AWQ / ControlNet INT8 / 无 Turbo',
@@ -57,7 +57,7 @@ def profiles():
     lan['models_digest'], lan['nodes_digest'] = digest(lan['models']), digest(lan['nodes'])
     lan['profile_digest'] = digest({k: lan[k] for k in ('profile_id', 'backend', 'gpu_vendor',
         'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template',
-        'models', 'nodes', 'variable_inputs', 'generation_node', 'input_slots', 'runtime_adapter')})
+        'models', 'nodes', 'variable_inputs', 'generation_node', 'input_slots', 'runtime_adapter', 'output_contract')})
     audio = dict(profile, profile_id='h3-a2va-int8-544x960-cu130-v1',
         label='H3 音频驱动 CUDA INT8 · 544×960 · 158 帧 · 20步',
         workflow_template=json.loads((root / 'h3-a2va-544x960.workflow.json').read_text()),
@@ -115,7 +115,7 @@ def generation_specification(task):
         facts = (task.get('_runpod_media') or {}).get(reference['asset_id']) or {}
         if facts.get('sha256') != reference.get('sha256'):
             facts = {}
-        return dict(width=facts.get('width'), height=facts.get('height'), length=facts.get('frames'),
+        return dict(width=facts.get('width'), height=facts.get('height'), length=None if contract.get('variable_length') else facts.get('frames'),
                     fps=facts.get('fps'), audio=contract['audio'])
     specification = dict(workflow['graph'][p['generation_node']]['inputs'])
     specification.update(fps=workflow['graph'][contract['fps_node']]['inputs']['fps'] if contract else 24,
@@ -256,10 +256,8 @@ def policy_view(task):
 
 def requirements_snapshot(task):
     """Server-owned immutable admission snapshot; never trust a caller's copy."""
-    from .runpod_media import lanpaint_error
     return {'schema_version': 1, 'backend': 'audio_cuda' if task.get('mode') in ('tts','align') else 'comfyui',
-            'profile_digests': [p['profile_digest'] for p in matching_profiles(task)
-                if not p.get('runtime_adapter') or lanpaint_error(task) is None]}
+            'profile_digests': [p['profile_digest'] for p in matching_profiles(task)]}
 
 
 def admitted_profiles(task):
@@ -350,6 +348,7 @@ def advice(raw, *, config=None):
             result.update(status='compatible', label='适合 NVIDIA · 待就绪',
                 scheduling='local_then_runpod', profile_digests=[p['profile_digest'] for p in matches],
                 profile_label=profile['label'],
+                runtime_backend=profile['backend'],
                 precision=profile.get('precision', 'H3 INT8 convrot / Qwen NVFP4 AWQ / Turbo BF16'),
                 comfy_version=profile['comfy_version'], required_nodes=[n['name'] for n in profile['nodes']['nodes']],
                 reasons=['工作流拓扑、模型与生成规格匹配已登记的 CUDA 配置。', profile['validation']],
@@ -357,9 +356,7 @@ def advice(raw, *, config=None):
                 cloud_claim_enabled=bool(enabled and admitted),
                 recommendation='本地兼容节点优先；兼容积压较大时准备 RunPod，资源与功能验证通过后再认领。')
             if media_error:
-                result.update(status='needs_review',label='素材不符合云端配置',profile_digests=[],
-                    cloud_claim_enabled=False,admission_snapshot=False,reasons=[media_error],
-                    recommendation='在服务侧核对素材媒体信息后再考虑开机；不会自动转换素材。')
+                result['reasons'].append(media_error)
             if mode == 'a2va':
                 result['reasons'].append('CUDA INT8 和音频 guide 不等于 Mac 原生算法或精度；须明确批准独立配置。')
             if profile['backend']=='audio_cuda':
