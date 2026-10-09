@@ -179,6 +179,11 @@ class CloudExecutor(Worker):
             await self._node_heartbeat('unhealthy' if self._unhealthy_reason else 'idle')
             await asyncio.sleep(5)
             return
+        try:
+            await remote_runner.release_finished(self)
+        except RemoteError:
+            await asyncio.sleep(2)
+            return  # Retry the same release before uploading the next task.
         await super()._claim_once_unlocked()
 
     async def _node_heartbeat(self, *args, **kwargs):

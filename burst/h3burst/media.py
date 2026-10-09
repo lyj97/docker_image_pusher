@@ -17,6 +17,8 @@ def video_result(path, ffprobe, task):
     if len(videos) != 1 or len(audios) != 1:
         raise ValueError('H3 profile requires one video and one audio stream')
     v = videos[0]
+    audio_duration = float(audios[0].get('duration') or 0)
+    audio_start = float(audios[0].get('start_time') or 0)
     from shared.execution import generation_specification
     specification = generation_specification(task)
     width, height = int(v['width']), int(v['height'])
@@ -27,7 +29,11 @@ def video_result(path, ffprobe, task):
             or frames != specification['length'] or fps != 24
             or not math.isfinite(duration) or abs(duration - frames / fps) > 1 / fps):
         raise ValueError('media differs from reviewed generation specification')
-    return {'width': width, 'height': height, 'frames': frames, 'fps': fps,
+    if (not math.isfinite(audio_duration) or not math.isfinite(audio_start)
+            or audio_duration <= 0 or abs(audio_duration - duration) > 1 / fps
+            or abs(audio_start) > 1 / fps):
+        raise ValueError('audio timeline differs from video specification')
+    return {'audio_duration_seconds': audio_duration, 'width': width, 'height': height, 'frames': frames, 'fps': fps,
             'duration_seconds': duration, 'output': str(path)}
 
 

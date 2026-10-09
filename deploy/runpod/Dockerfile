@@ -7,6 +7,7 @@ COPY shared/*.py /opt/h3-service/shared/
 COPY shared/execution_profiles/*.json /opt/h3-service/shared/execution_profiles/
 COPY client/h3worker/*.py /opt/h3-service/client/h3worker/
 COPY client/vace_smoke.py client/vace_reconcile.py /opt/h3-service/client/
+COPY client/comfy_h3_contract_node /opt/h3-service/client/comfy_h3_contract_node
 COPY burst/h3burst /opt/h3-service/burst/h3burst
 COPY deploy/runpod/check_image.py /opt/h3-service/check_image.py
 COPY deploy/runpod/build_nodes.py /opt/h3-service/build_nodes.py

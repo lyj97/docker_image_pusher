@@ -90,16 +90,22 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
             resolved['ref:' + task['anchors']['first']['asset_id']] = resolved.pop('anchors.first', None)
         if set(resolved) != {'ref:' + r['asset_id'] for r in task_references(task)} or any(v is None for v in resolved.values()):
             raise ValueError('cloud input resolution incomplete')
-        for asset, descriptor in body.get('inputs', {}).items():
-            worker._check_lease_alive()
-            await asyncio.to_thread(remote.upload, resolved['ref:' + asset], descriptor,
-                                    worker._transfer_should_abort)
-        worker._check_lease_alive()
-        if _shutdown_requested(worker) or worker.cancel_requested.is_set():
-            raise CancelRequested()
         state = {'remote': True, 'terminal': False, 'generation': remote.generation,
                  'url': remote.base, 'request_digest': digest(task),
-                 'remote_request_digest': digest(body), 'submission_started': True}
+                 'remote_request_digest': digest(body), 'submission_started': False}
+        persist(worker, attempt_id, state)  # Own uploads before any byte transfer.
+        try:
+            for asset, descriptor in body.get('inputs', {}).items():
+                worker._check_lease_alive()
+                await asyncio.to_thread(remote.upload, resolved['ref:' + asset], descriptor,
+                    worker._transfer_should_abort, execution_id=attempt_id, request_digest=digest(body))
+            worker._check_lease_alive()
+            if _shutdown_requested(worker) or worker.cancel_requested.is_set():raise CancelRequested()
+        except BaseException:
+            state.update(terminal=True, status='failed')
+            persist(worker, attempt_id, state)
+            raise
+        state['submission_started'] = True
         persist(worker, attempt_id, state)
         try:
             view = await asyncio.to_thread(remote.json, '/v1/executions', body)
@@ -186,6 +192,11 @@ async def recover_orphans(worker):
         state = json.loads(row['engine_state']) if row.get('engine_state') else None
         if not state or not state.get('remote') or state.get('terminal'):
             continue
+        if state.get('submission_started') is False:
+            state.update(terminal=True,status='failed')
+            persist(worker,row['attempt_id'],state)
+            resolved=True
+            continue
         if confirmed_stopped(worker, state):
             state.update(terminal=True, status='failed')
             persist(worker, row['attempt_id'], state)
@@ -210,10 +221,38 @@ async def recover_orphans(worker):
     return resolved
 
 
+async def release_finished(worker):
+    # Confirmed H3 publication/finish is the ownership handoff, not Pod completion.
+    for identity in worker.journal.conn.execute('SELECT attempt_id FROM attempts WHERE engine_state IS NOT NULL').fetchall():
+        row = worker.journal.get_attempt(identity['attempt_id'])
+        state = json.loads(row['engine_state']) if row.get('engine_state') else None
+        if (not state or not state.get('remote') or not state.get('terminal') or state.get('status') not in ('completed','failed','cancelled') or state.get('released')
+                or not row.get('confirmed_terminal')
+                or (state.get('status') == 'completed' and not row.get('finish_accepted'))):
+            continue
+        if state['generation'] != worker.remote.generation or state['url'] != worker.remote.base:
+            continue  # Another boot's data cannot be deleted via this binding.
+        try:
+            view = await asyncio.to_thread(worker.remote.json, '/v1/executions/' + row['attempt_id'] + '/release',
+                {'request_digest': state['remote_request_digest']})
+        except RemoteError as exc:
+            if exc.code != 'execution_not_found' or state.get('status') == 'completed':raise
+            view = {'generation':state['generation'],'execution_id':row['attempt_id'],
+                'request_digest':state['remote_request_digest'],'released':True}
+        if (view.get('generation') != state['generation'] or view.get('execution_id') != row['attempt_id']
+                or view.get('request_digest') != state['remote_request_digest']):
+            raise RemoteError('release_identity_conflict')
+        if view.get('released') is not True:
+            raise RemoteError('release_not_confirmed')
+        state['released'] = True
+        persist(worker, row['attempt_id'], state)
+
+
 async def recovery_loop(worker):
     while not worker.stop_event.is_set():
         if worker.current_attempt is None:
             try:
+                await release_finished(worker)
                 if await recover_orphans(worker):
                     worker._comfy_reconcile_pending = True
             except Exception:

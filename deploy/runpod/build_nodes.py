@@ -1,5 +1,6 @@
 """CI-only node checkout: keep pinned runtime code, omit LanPaint demos."""
 import json
+import shutil
 from pathlib import Path
 import subprocess
 
@@ -28,3 +29,5 @@ for name, node in nodes.items():
     git('checkout','--detach',node['commit'])
     (root/'.h3-managed-node.json').write_text(json.dumps(node,sort_keys=True))
 print(json.dumps({'baked_nodes':list(nodes),'models_downloaded':False}))
+
+shutil.copytree('/opt/h3-service/client/comfy_h3_contract_node', '/opt/comfyui-baked/custom_nodes/H3AVContract')

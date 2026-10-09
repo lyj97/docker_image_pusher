@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 import time
 import uuid
-from shared.execution import profiles, matching_profiles, requirements_snapshot
+from shared.execution import digest, profiles, matching_profiles, requirements_snapshot
 from .transport import Transport
 
 
@@ -113,12 +113,13 @@ def run(args,binding,remote):
             local=json.loads(args.inputs.read_text())
             if task['mode']=='a2va':local['ref:'+task['anchors']['first']['asset_id']]=local.pop('anchors.first')
             if set(local)!={'ref:'+a for a in assets}:raise ValueError('acceptance inputs mismatch')
-            for asset,item in assets.items():remote.upload(local['ref:'+asset],item)
             intent['inputs']=assets
-        # Operator journal before POST, same no-repeat contract as CloudExecutor.
+        # Operator journal before uploads and POST, same no-repeat contract as CloudExecutor.
         (args.output/'binding.json').write_text(json.dumps({'pod_url':binding['pod_url'],'generation':binding['generation']}))
         with (args.output/'intent.json').open('w') as output:
             json.dump(intent,output);output.flush();os.fsync(output.fileno())
+        for asset,item in assets.items():
+            remote.upload(local['ref:'+asset],item,execution_id=execution,request_digest=digest(intent))
         remote.json('/v1/executions',intent)
     profile=matching_profiles(task)[0]
     while True:

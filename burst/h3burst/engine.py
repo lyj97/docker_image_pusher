@@ -237,7 +237,7 @@ class Engine:
             with log_path.open('ab', buffering=0) as log:
                 # Exact nodes/dependencies/provenance were verified when publishing this image.
                 nodes = {n['name']:n for p in profiles() for n in p['nodes']['nodes']}
-                for name in nodes:
+                for name in (*nodes, 'H3AVContract'):
                     shutil.copytree(Path('/opt/comfyui-baked/custom_nodes') / name,
                                     self.comfy_root / 'custom_nodes' / name)
                 if self.stop_preparation.is_set():
@@ -247,7 +247,7 @@ class Engine:
                     '--port', '8188', '--disable-auto-launch', '--disable-partner-nodes', '--cache-none',
                     '--disable-all-custom-nodes']
                 if nodes:
-                    argv += ['--whitelist-custom-nodes', *nodes]
+                    argv += ['--whitelist-custom-nodes', *nodes, 'H3AVContract']
                 self.comfy_log = (self.state_root / 'comfy.log').open('ab', buffering=0)
                 self.process = subprocess.Popen(argv, cwd=self.comfy_root,
                     stdout=self.comfy_log, stderr=subprocess.STDOUT, start_new_session=True)

@@ -52,10 +52,12 @@ def profiles():
             'commit': '2d7912f9a5efe5ece8de334c7ca18317b8288c39',
             'requirements': None,
             'classes': ['LanPaint_VideoMaskEditor', 'LanPaint_AVEncode', 'LanPaint_AVDecode']}]})
+    adapter = Path(__file__).resolve().parents[1] / 'client/comfy_h3_contract_node/__init__.py'
+    lan['runtime_adapter'] = {'node':'H3AVMaskPrepare', 'source_sha256':hashlib.sha256(adapter.read_bytes()).hexdigest()}
     lan['models_digest'], lan['nodes_digest'] = digest(lan['models']), digest(lan['nodes'])
     lan['profile_digest'] = digest({k: lan[k] for k in ('profile_id', 'backend', 'gpu_vendor',
         'comfy_version', 'comfy_commit', 'torch_version', 'workflow_template',
-        'models', 'nodes', 'variable_inputs', 'generation_node', 'input_slots')})
+        'models', 'nodes', 'variable_inputs', 'generation_node', 'input_slots', 'runtime_adapter')})
     audio = dict(profile, profile_id='h3-a2va-int8-544x960-cu130-v1',
         label='H3 音频驱动 CUDA INT8 · 544×960 · 158 帧 · 20步',
         workflow_template=json.loads((root / 'h3-a2va-544x960.workflow.json').read_text()),
@@ -92,7 +94,12 @@ def task_references(task):
 
 def execution_workflow(task, profile=None):
     if task.get('mode') != 'a2va':
-        return copy.deepcopy(task['workflow'])
+        workflow = copy.deepcopy(task['workflow'])
+        profile = profile or next(iter(matching_profiles(task)), None)
+        if profile and profile.get('runtime_adapter'):
+            workflow['graph']['h3avmask'] = {'class_type':'H3AVMaskPrepare', 'inputs':{'latent':['30', 0]}}
+            workflow['graph']['10']['inputs']['latent_image'] = ['h3avmask', 0]
+        return workflow
     profile = profile or next(p for p in profiles() if p.get('native_generation'))
     workflow = copy.deepcopy(profile['workflow_template'])
     workflow['graph']['7']['inputs']['prompt'] = task['prompt']
@@ -177,15 +184,18 @@ def matching_profiles(task):
 
 def requirements_snapshot(task):
     """Server-owned immutable admission snapshot; never trust a caller's copy."""
+    from .runpod_media import lanpaint_error
     return {'schema_version': 1, 'backend': 'comfyui',
-            'profile_digests': [p['profile_digest'] for p in matching_profiles(task)]}
+            'profile_digests': [p['profile_digest'] for p in matching_profiles(task)
+                if not p.get('runtime_adapter') or lanpaint_error(task) is None]}
 
 
 def admitted_profiles(task):
     """Profiles supported by both current review and immutable admission."""
     if task.get('_execution_requirements') != requirements_snapshot(task):
         return ()
-    return matching_profiles(task)
+    allowed = requirements_snapshot(task)['profile_digests']
+    return tuple(p for p in matching_profiles(task) if p['profile_digest'] in allowed)
 
 
 def ready_profiles(capabilities, config, worker_id, *, first_task=False):
@@ -260,7 +270,9 @@ def advice(raw, *, config=None):
         else:
             profile = matches[0]
             snapshot = task.get('_execution_requirements') or {}
-            admitted = snapshot == requirements_snapshot(task)
+            admitted = bool(admitted_profiles(task))
+            from .runpod_media import lanpaint_error
+            media_error = lanpaint_error(task) if profile.get('runtime_adapter') else None
             enabled = (getattr(config, 'runpod_execution_enabled', False)
                        and profile['profile_digest'] in getattr(config, 'runpod_validated_profiles', ()))
             result.update(status='compatible', label='适合 NVIDIA · 待就绪',
@@ -272,6 +284,10 @@ def advice(raw, *, config=None):
                 admission_snapshot=admitted, automatic_execution=False,
                 cloud_claim_enabled=bool(enabled and admitted),
                 recommendation='本地兼容节点优先；兼容积压较大时准备 RunPod，资源与功能验证通过后再认领。')
+            if media_error:
+                result.update(status='needs_review',label='素材不符合云端配置',profile_digests=[],
+                    cloud_claim_enabled=False,admission_snapshot=False,reasons=[media_error],
+                    recommendation='在服务侧核对素材媒体信息后再考虑开机；不会自动转换素材。')
             if mode == 'a2va':
                 result['reasons'].append('CUDA INT8 和音频 guide 不等于 Mac 原生算法或精度；须明确批准独立配置。')
             if not admitted:

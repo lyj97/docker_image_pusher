@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import shutil
 import sqlite3
 import threading
 import time
@@ -48,6 +49,8 @@ class Pod:
         self.db.execute('CREATE TABLE IF NOT EXISTS execution (id TEXT PRIMARY KEY, generation TEXT, '
                         'request_digest TEXT, record TEXT NOT NULL)')
         self.db.execute('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)')
+        self.db.execute('CREATE TABLE IF NOT EXISTS pending_input (owner TEXT,sha TEXT,PRIMARY KEY(owner,sha))')
+        self.db.execute('CREATE TABLE IF NOT EXISTS upload_intent (id TEXT PRIMARY KEY,request_digest TEXT,released INTEGER DEFAULT 0)')
         self.generation, self.engine, self.evidence = generation, engine, evidence
         self.uploads = 0
         self.acceptance_enabled = acceptance_enabled
@@ -128,6 +131,9 @@ class Pod:
                 if record['request_digest'] != request_digest:
                     raise Refused('execution_identity_conflict')
                 return self.observe(execution)  # NEVER resubmit, even after restart or lost reply.
+            reserved = self.db.execute('SELECT request_digest,released FROM upload_intent WHERE id=?',(execution,)).fetchone()
+            if reserved and (reserved['released'] or reserved['request_digest'] != request_digest):
+                raise Refused('upload_identity_conflict')
             matches = admitted_profiles(task)
             proofs = self.engine.all_evidence() if hasattr(self.engine, 'all_evidence') else [self.evidence()]
             proof = next((self.ready(p) for p in proofs if len(matches)==1 and p.get('profile_digest')==matches[0]['profile_digest']), {})
@@ -148,6 +154,8 @@ class Pod:
             if execution_task.get('references'):
                 record['input_root'] = str(self.engine.comfy_root.resolve())
             self.save(record)  # Intent owns private inputs before any copy or Comfy submission.
+            with self.db:
+                self.db.execute('DELETE FROM pending_input WHERE owner=?',(execution,))
             try:
                 if execution_task.get('references'):
                     from .inputs import paths
@@ -199,7 +207,7 @@ class Pod:
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
-            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code') if key in record}
+            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released') if key in record}
 
     def observe(self, execution):
         # Concurrent readers use durable state while one observer does slow Comfy I/O.
@@ -286,8 +294,81 @@ class Pod:
                 self.db.execute("INSERT OR REPLACE INTO meta VALUES ('draining','true')")
             return self.status()
 
+    def release(self, execution, body):
+        with self.mutex:
+            row = self.db.execute('SELECT 1 FROM execution WHERE id=?',(execution,)).fetchone()
+            if not row:return self.release_upload(execution, body)
+            record = self.load(execution)
+            if set(body) != {'request_digest'} or body['request_digest'] != record['request_digest']:
+                raise Refused('release_identity_conflict')
+            if not record.get('terminal') or record['state'] not in TERMINAL:
+                raise Refused('execution_not_terminal')
+            if record.get('released'):
+                return self.public(record)
+            if self.uploads:
+                raise Refused('exclusive_slot_busy')
+            record['release_requested'] = True
+            self.save(record)
+            self.cleanup_inputs(record)
+            if record.get('error_code') == 'input_cleanup_failed':
+                raise Refused('input_cleanup_failed')
+            namespace = 'h3_' + record['prompt_id'].replace('-', '')
+            folder = self.engine.comfy_root / 'output' / namespace
+            if any(p.is_symlink() for p in (folder, *folder.parents)) or (folder.exists() and
+                    (not folder.is_dir() or any(p.is_symlink() for p in folder.rglob('*')))):
+                raise Refused('unsafe_release_path')
+            if folder.exists():shutil.rmtree(folder)
+            # New uploads reserve a SHA before binding; don't delete their receipt.
+            protected = {r[0] for r in self.db.execute('SELECT sha FROM pending_input WHERE owner != ?',(execution,))}
+            for row in self.db.execute('SELECT record FROM execution WHERE id != ?', (execution,)):
+                other = json.loads(row[0])
+                if not other.get('released'):
+                    protected.update(r['sha256'] for r in task_references(other.get('task', {})))
+            for ref in task_references(record.get('task', {})):
+                sha = ref['sha256']
+                if sha in protected:continue
+                path = self.root / 'inputs' / sha
+                if any(p.is_symlink() for p in (path, *path.parents)) or (path.exists() and not path.is_file()):
+                    raise Refused('unsafe_release_path')
+                path.unlink(missing_ok=True)
+            with self.db:
+                self.db.execute('DELETE FROM pending_input WHERE owner=?',(execution,))
+                self.db.execute('UPDATE upload_intent SET released=1 WHERE id=?',(execution,))
+            record.update(released=True)
+            record.pop('task', None)  # Keep only the small identity/terminal tombstone.
+            self.save(record)
+            return self.public(record)
+
+    def release_upload(self, execution, body):
+        intent = self.db.execute('SELECT * FROM upload_intent WHERE id=?',(execution,)).fetchone()
+        if intent is None:raise Refused('execution_not_found',404)
+        if set(body) != {'request_digest'} or body['request_digest'] != intent['request_digest']:
+            raise Refused('release_identity_conflict')
+        if self.uploads:raise Refused('exclusive_slot_busy')
+        # No execution row exists under the same mutex: fence any late POST.
+        with self.db:self.db.execute('UPDATE upload_intent SET released=1 WHERE id=?',(execution,))
+        protected = {r[0] for r in self.db.execute('SELECT sha FROM pending_input WHERE owner != ?',(execution,))}
+        for row in self.db.execute('SELECT record FROM execution'):
+            other=json.loads(row[0])
+            if not other.get('released'):
+                protected.update(r['sha256'] for r in task_references(other.get('task',{})))
+        for row in self.db.execute('SELECT sha FROM pending_input WHERE owner=?',(execution,)):
+            temporary=self.root/'inputs'/('.pending-'+execution+'-'+row[0])
+            if any(p.is_symlink() for p in (temporary,*temporary.parents)) or (temporary.exists() and not temporary.is_file()):
+                raise Refused('unsafe_release_path')
+            temporary.unlink(missing_ok=True)
+            if row[0] in protected:continue
+            path=self.root/'inputs'/row[0]
+            if any(p.is_symlink() for p in (path,*path.parents)) or (path.exists() and not path.is_file()):
+                raise Refused('unsafe_release_path')
+            path.unlink(missing_ok=True)
+        with self.db:self.db.execute('DELETE FROM pending_input WHERE owner=?',(execution,))
+        return {'execution_id':execution,'generation':self.generation,
+            'request_digest':intent['request_digest'],'released':True}
+
     def artifact_path(self, execution):
         record = self.load(execution)
+        if record.get('released'):raise Refused('artifact_released', 410)
         if not record['terminal'] or record['state'] != 'completed':
             raise Refused('artifact_not_ready')
         return self.engine.output_path(record)
@@ -347,6 +428,8 @@ def create_app(pod, token, expires_at):
                 return FileResponse(path, media_type='video/mp4', headers={'Cache-Control': 'no-store'})
             elif execution and request.method == 'GET' and not route:
                 value = await asyncio.to_thread(pod.observe, execution)
+            elif execution and request.method == 'POST' and route == 'release':
+                value = await asyncio.to_thread(pod.release, execution, body)
             elif execution and request.method == 'POST' and route == 'cancel':
                 value = await asyncio.to_thread(pod.cancel, execution)
             else:

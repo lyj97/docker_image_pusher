@@ -88,7 +88,9 @@ class Transport:
             raise RemoteError('generation_conflict')
         return value
 
-    def upload(self, source, descriptor, abort=lambda: False):
+    def upload(self, source, descriptor, abort=lambda: False, *, execution_id, request_digest):
+        if not re.fullmatch(r'att_[A-Za-z0-9_-]{8,64}',execution_id) or not re.fullmatch('[0-9a-f]{64}',request_digest):
+            raise ValueError('upload execution identity required')
         from .inputs import verify_descriptor
         verify_descriptor(descriptor)
         size = descriptor['size_bytes'];sha = descriptor['sha256']
@@ -106,7 +108,8 @@ class Transport:
             if sent != size or h.hexdigest() != sha:raise RemoteError('input_integrity_failure')
         req = urllib.request.Request(self.base + '/v1/inputs/' + sha, data=chunks(), method='PUT',
             headers={'Content-Type':'application/octet-stream', 'Content-Length':str(size),
-                'Authorization':'Bearer ' + self.token, 'X-H3-Generation':self.generation})
+                'Authorization':'Bearer ' + self.token, 'X-H3-Generation':self.generation,
+                'X-H3-Execution':execution_id,'X-H3-Request-Digest':request_digest})
         try:
             with self.opener.open(req, timeout=max(self.timeout, 60)) as response:
                 raw = response.read(MAX_JSON + 1)

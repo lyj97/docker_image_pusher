@@ -39,3 +39,9 @@ profile = profile_by_id(os.environ.get('H3POD_PROFILE_ID', profiles()[0]['profil
 assert profile['models']['models'] and profile['workflow_template']['graph']
 print(json.dumps({'profile_id':profile['profile_id'], 'baked_nodes':list(nodes),
                   'torch_version':torch.__version__, 'gpu_generation_tested':False}))
+
+import hashlib
+adapter=Path('/opt/comfyui-baked/custom_nodes/H3AVContract/__init__.py')
+assert hashlib.sha256(adapter.read_bytes()).hexdigest() == profiles()[1]['runtime_adapter']['source_sha256']
+import runpy
+assert 'H3AVMaskPrepare' in runpy.run_path(str(adapter))['NODE_CLASS_MAPPINGS']
