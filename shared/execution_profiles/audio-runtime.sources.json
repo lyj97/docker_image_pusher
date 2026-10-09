@@ -1,5 +1,5 @@
 {
   "burst/h3burst/audio_runner.py": "e71dcfad4901c4e8bb87c636d5790da80dd2a8b20a17bdcab04b5ae8a7f91b00",
   "burst/h3burst/audio_process.py": "95cf17e9020ba6c40f272ad5cc19f43334e2ac65d47542eb561e3feb9ad3558d",
-  "deploy/runpod/build_audio.py": "187ed7a3e760414b865e7198c0d7a024625be66d491eefa90e5103653b97658b"
+  "deploy/runpod/build_audio.py": "4f3aaaa8ba0ef35c170b71fe135a3608605f7adb38b5d04dde7102fdc9364ad9"
 }

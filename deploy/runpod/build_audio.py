@@ -16,7 +16,7 @@ REQUIREMENTS = {
     # Rich, plotting and download helpers even though inference does not use them.
     'cosyvoice3': ['transformers==4.51.3','onnxruntime-gpu==1.30.0','conformer==0.3.2',
         'diffusers==0.35.1','HyperPyYAML==1.2.3','inflect==7.3.1','librosa==0.10.2',
-        'lightning==2.2.4','modelscope==1.40.2','omegaconf==2.3.0','openai-whisper==20250625',
+        'lightning==2.6.6','modelscope==1.40.2','omegaconf==2.3.0','openai-whisper==20250625',
         'soundfile==0.12.1','x-transformers==2.11.24','wetext==0.1.8',
         'hydra-core==1.3.2','rich==15.0.0','gdown==6.4.2','wget==3.2','matplotlib==3.11.2'],
 }
