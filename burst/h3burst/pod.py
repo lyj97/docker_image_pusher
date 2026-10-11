@@ -80,7 +80,7 @@ class Pod:
         # Original protocol journal has no prompts, URLs, tokens or outputs.
         with (self.root / 'protocol.log').open('a') as log:
             log.write(json.dumps({key: record.get(key) for key in
-                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error', 'execution_error')}) + '\n')
+                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error', 'execution_error', 'diagnostic_write_failed')}) + '\n')
             log.flush()
             os.fsync(log.fileno())
 
@@ -94,6 +94,9 @@ class Pod:
         try:
             write_private(self.root / ('failure-' + record['execution_id'] + '.json'), value)
         except (OSError, ValueError):
+            if not record.get('diagnostic_write_failed'):
+                try:print('[pod] diagnostic_write_failed execution ' + record['execution_id'], flush=True)
+                except OSError:pass
             record['diagnostic_write_failed'] = True
         evidence = validation_failure(diagnostic)
         if evidence is not None:record['execution_error'] = evidence
@@ -232,7 +235,7 @@ class Pod:
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
-            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released', 'execution_error') if key in record}
+            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released', 'execution_error', 'diagnostic_write_failed') if key in record}
 
     def observe(self, execution):
         # Concurrent readers use durable state while one observer does slow Comfy I/O.

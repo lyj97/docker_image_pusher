@@ -68,7 +68,15 @@ def apply_observation(worker, attempt_id, state, view):
             write_private(path, diagnostic)
             state['diagnostic_available'] = True
         except (OSError, ValueError):
+            if not state.get('diagnostic_write_failed'):
+                try:print('[cloud] diagnostic_write_failed attempt ' + attempt_id, flush=True)
+                except OSError:pass
             state['diagnostic_write_failed'] = True
+    if view.get('diagnostic_write_failed') is True:
+        if not state.get('remote_diagnostic_write_failed'):
+            try:print('[cloud] remote_diagnostic_write_failed attempt ' + attempt_id, flush=True)
+            except OSError:pass
+        state['remote_diagnostic_write_failed'] = True
     if view.get('error_code') in {'prompt_rejected','prompt_identity_uncertain','input_binding_failed','input_binding_interrupted',
                                  'artifact_validation_failed','comfy_observation_unavailable'}:
         state['error_code'] = view['error_code']
