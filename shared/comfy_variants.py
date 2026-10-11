@@ -51,6 +51,27 @@ def variants(base):
             'comfy_commit','torch_version','workflow_template','models','nodes','variable_inputs',
             'input_slots','generation_node','output_contract','flexible_media','runtime_sources')})
         result.append(p)
+    # Exact complete-canvas repair recipe; no implicit precision/topology conversion.
+    p=dict(base, profile_id='vace-full158-fp8-scaled-cu130-v1',
+        label='Wan VACE 完整14B FP8 scaled · 37帧局修与158帧原声装配',
+        workflow_template=json.loads((root/'vace-full158.workflow.json').read_text()),
+        models=json.loads((root/'vace-full158.models.json').read_text()),
+        nodes={'schema_version':1,'nodes':[{'name':'LanPaint',
+            'repository':'https://github.com/scraed/LanPaint.git',
+            'commit':'2d7912f9a5efe5ece8de334c7ca18317b8288c39',
+            'requirements':None,'classes':['LanPaint_VideoMaskEditor']}]},
+        variable_inputs=[['4','text','text'],['11','seed','seed']],
+        input_slots=[('video','video/mp4')]*4+[('audio','audio/wav'),('video','video/mp4')],
+        generation_node='10', flexible_media=True,
+        output_contract={'inherit_reference':5,'audio':'required'},
+        precision='完整14B FP8 scaled；保留请求权重，不转换为FP16或1.3B',
+        validation='Mac 37帧局部图已运行；完整158 CUDA schema、资源与真实输出待资格核验',
+        runtime_sources={'shared/comfy_variants.py':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()})
+    p['models_digest'],p['nodes_digest']=digest(p['models']),digest(p['nodes'])
+    p['profile_digest']=digest({k:p[k] for k in ('profile_id','backend','gpu_vendor','comfy_version',
+        'comfy_commit','torch_version','workflow_template','models','nodes','variable_inputs',
+        'input_slots','generation_node','output_contract','flexible_media','runtime_sources')})
+    result.append(p)
     return result
 
 

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "models": [
+    {
+      "repo": "spacepxl/Wan2.1_VACE_14B_fp8_scaled",
+      "revision": "ca11fea2fccb16ed7e3642c326a3720162736dc7",
+      "source": "wan2.1_vace_14B_fp8_scaled.safetensors",
+      "target": "diffusion_models/wan2.1_vace_14B_fp8_scaled.safetensors",
+      "bytes": 17578334838,
+      "sha256": "0a1a102f4d514e7455415524063dd90920d9338a36391419e8c392668e8aea87"
+    },
+    {
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+      "source": "split_files/text_encoders/umt5_xxl_fp16.safetensors",
+      "target": "text_encoders/umt5_xxl_fp16.safetensors",
+      "bytes": 11366399385,
+      "sha256": "7b8850f1961e1cf8a77cca4c964a358d303f490833c6c087d0cff4b2f99db2af"
+    },
+    {
+      "repo": "Comfy-Org/Wan_2.1_ComfyUI_repackaged",
+      "revision": "123acf1cc74bccbb9bfff8ac1ee72edc08c2341d",
+      "source": "split_files/vae/wan_2.1_vae.safetensors",
+      "target": "vae/wan_2.1_vae.safetensors",
+      "bytes": 253815318,
+      "sha256": "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b"
+    }
+  ]
+}

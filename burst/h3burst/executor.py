@@ -278,12 +278,51 @@ def check_config(worker):
         worker._lock_fh.close()
 
 
+async def recover_stopped_once(worker, binding, h3):
+    """Recover existing leases only; no registration, readiness, claim or release."""
+    expected = {'generation': binding['generation'], 'url': binding['pod_url']}
+    if not remote_runner.confirmed_stopped(worker, expected):
+        raise ValueError('current binding lacks formal provider stop proof')
+    rows = h3.request('/v1/admin/workers').get('workers', [])
+    slots = [r for r in rows if r.get('worker_id') == worker.config.worker_id]
+    if len(slots) != 1 or slots[0].get('operator_draining') is not True:
+        raise ValueError('stopped recovery requires operator drain')
+    # Adapter orphan recovery scans the whole journal, including old boots.
+    identities = {r['attempt_id'] for r in worker.journal.active_attempts()}
+    identities.update(r['attempt_id'] for r in worker.journal.conn.execute(
+        'SELECT attempt_id FROM attempts WHERE engine_state IS NOT NULL'))
+    for identity in identities:
+        row = worker.journal.get_attempt(identity)
+        state = json.loads(row['engine_state']) if row.get('engine_state') else None
+        if row.get('confirmed_terminal') and (not state or state.get('terminal')):
+            continue
+        if state and (not state.get('remote') or state.get('generation') != expected['generation']
+                      or state.get('url') != expected['url']
+                      or (state.get('status') == 'completed' and not row.get('finish_payload'))):
+            raise ValueError('attempt cannot be recovered without remote contact')
+    worker._drain = True
+    await remote_runner.recover_orphans(worker)
+    await worker._recover_on_boot()
+    return {'recovery_only': True, 'remaining_attempts': len(worker.journal.active_attempts()),
+            'provider_confirmed': True, 'started': False}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binding', type=Path, required=True)
     parser.add_argument('--check-config', action='store_true',
                         help='check deployment as the service user before Pod startup, then exit')
+    parser.add_argument('--recover-stopped-once', action='store_true',
+                        help='recover existing leases under formal stop proof; never register or claim')
     args = parser.parse_args()
+    if args.check_config and args.recover_stopped_once:
+        parser.error('deployment check and stopped recovery are exclusive')
+    if args.recover_stopped_once:
+        from .session import private_config, inactive_services
+        private_config(args.binding)
+        inactive_services()
+    if (args.binding.parent / 'session-renewal.pending').exists():
+        raise ValueError('unfinished session renewal; executor startup blocked')
     binding = json.loads(args.binding.read_text())
     # Binding is operator-owned nonsecret config; no task-supplied URLs/repos.
     cfg = WorkerConfig.from_env()
@@ -293,6 +332,18 @@ def main():
     worker = CloudExecutor(cfg, remote, binding['approved_profiles'],
                            first_task_validation=binding.get('first_task_validation', False),
                            stop_on_error=binding.get('stop_on_error', False))
+    if args.recover_stopped_once:
+        from .control import H3Control
+        try:
+            worker._acquire_singleton_lock()
+            result = asyncio.run(recover_stopped_once(worker, binding,
+                H3Control(binding.get('h3_admin_url', 'http://127.0.0.1:8730'), binding['worker_id'])))
+            print(json.dumps(result))
+            if result['remaining_attempts']:
+                raise SystemExit(1)
+        finally:
+            worker.journal.close()
+        return
     if args.check_config:
         try:
             print(json.dumps(check_config(worker)))

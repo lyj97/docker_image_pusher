@@ -80,6 +80,22 @@ class Provider:
     def stop(self, pod_id):
         return self.request(pod_id, True)
 
+    def update_env(self, pod_id, env):
+        """Replace only the explicitly bound Pod environment; never start it."""
+        if not re.fullmatch('[A-Za-z0-9]{8,64}', pod_id):
+            raise ValueError('invalid bound Pod id')
+        req = urllib.request.Request('https://api.runpod.io/v2/pods/' + pod_id,
+            data=json.dumps({'env': env}).encode(), method='PATCH',
+            headers={'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
+        try:
+            with self.opener.open(req, timeout=10) as response:
+                raw = response.read(MAX_JSON + 1)
+                if len(raw) > MAX_JSON:
+                    raise RemoteError('provider_response_too_large')
+                return json.loads(raw)
+        except Exception:
+            raise RemoteError('provider_operation_uncertain') from None
+
 
 class H3Control:
     """Existing loopback-only admin API; no DB credentials or direct task mutation."""
@@ -107,6 +123,10 @@ class H3Control:
     def idle(self):
         proof = self.request('/v1/admin/workers/' + self.worker + '/cloud-stop-proof')
         return proof.get('safe_to_stop') is True
+
+    def renewable(self):
+        proof = self.request('/v1/admin/workers/' + self.worker + '/cloud-stop-proof')
+        return proof.get('safe_to_renew') is True
 
 
 
@@ -276,6 +296,17 @@ class Controller:
         return {'state': 'STOPPING', 'estimated_compute_usd': str(spent)}
 
 
+def reconcile_stopped(control):
+    """One fresh provider observation; never enter live lifecycle branches."""
+    pod = control.provider.get(control.binding['pod_id'])
+    if pod.get('id') != control.binding['pod_id'] or pod.get('name') != control.binding['pod_name'] \
+            or pod.get('status') not in ('STOPPED', 'EXITED'):
+        raise ValueError('bound Pod is not confirmed stopped')
+    # OFF may belong to an earlier generation; obtain this generation's receipt.
+    control.save('phase', 'OBSERVING')
+    return control.tick()
+
+
 def main():
     from h3worker.journal import Journal
     parser = argparse.ArgumentParser(description=__doc__)
@@ -283,7 +314,35 @@ def main():
     parser.add_argument('--state', required=True, type=Path)
     parser.add_argument('--journal', required=True, type=Path)
     parser.add_argument('--interval', default=10, type=int)
+    parser.add_argument('--mcp-stopped-once', action='store_true',
+                        help='private MCP GET only; reconcile a stopped Pod once')
     args = parser.parse_args()
+    if args.mcp_stopped_once:
+        # Lazy import avoids session -> control -> session import initialization.
+        from .session import MCPProvider, private_stdio, private_config
+        class ReadOnlyMCPProvider(MCPProvider):
+            def exchange(self, operation, params):
+                if operation != 'get_pod':
+                    raise ValueError('stopped reconciliation permits GET only')
+                return super().exchange(operation, params)
+        try:
+            with private_stdio():
+                private_config(args.binding)
+                binding = json.loads(args.binding.read_text())
+                journal = Journal.open_readonly(str(args.journal))
+                control = Controller(args.state, binding, ReadOnlyMCPProvider(binding['pod_id']), None,
+                    H3Control(binding.get('h3_admin_url', 'http://127.0.0.1:8730'), binding['worker_id']), journal)
+                try:
+                    result = reconcile_stopped(control)
+                finally:
+                    control.close()
+                    journal.close()
+            print(json.dumps({'type': 'result', 'payload': result}), flush=True)
+        except Exception:
+            print(json.dumps({'type': 'result', 'payload': {'state': 'RECONCILING',
+                'error': 'stopped_reconciliation_refused', 'provider_confirmed': False}}), flush=True)
+            raise SystemExit(1) from None
+        return
     binding = json.loads(args.binding.read_text())
     journal = Journal.open_readonly(str(args.journal))
     remote = Transport(binding['pod_url'], os.environ['H3BURST_POD_TOKEN'], binding['generation'])

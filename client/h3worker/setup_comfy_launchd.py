@@ -9,9 +9,9 @@ import tempfile
 from pathlib import Path
 
 if __package__:
-    from .comfy_launch import absolute_path, arguments, validate
+    from .comfy_launch import absolute_path, arguments, validate, launcher_options
 else:
-    from comfy_launch import absolute_path, arguments, validate
+    from comfy_launch import absolute_path, arguments, validate, launcher_options
 
 
 def publish_private(path: Path, content: bytes, *, reuse_identical: bool) -> None:
@@ -67,10 +67,7 @@ def generate(args: argparse.Namespace, home: Path | None = None) -> Path:
     command = [args.python, '-I', '-B', str(launcher), '--root', args.root,
                '--python', args.python, '--frontend', args.frontend,
                '--port', str(args.port)]
-    if args.no_keep_awake:
-        command.append('--no-keep-awake')
-    for path in getattr(args, 'tool_bin', []):
-        command.extend(['--tool-bin', path])
+    command.extend(launcher_options(args))
     payload = {
         'Label': 'com.relife.h3comfyui',
         'ProgramArguments': command,

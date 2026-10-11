@@ -147,7 +147,12 @@ def _validate(task, extra_denied):
             lower = key.lower()
             if (node_id, key) in bound:
                 continue  # binding-specific policy already checked above
-            if dangerous_key(key) or lower in LOCAL_ASSET_KEYS:
+            # This core node's destination is an IMAGE link, never a file path.
+            image_destination = (cls == 'ImageCompositeMasked' and key == 'destination'
+                                 and isinstance(value, list) and len(value) == 2
+                                 and isinstance(value[0], str) and value[0] in graph
+                                 and type(value[1]) is int and 0 <= value[1] <= 255)
+            if (dangerous_key(key) or lower in LOCAL_ASSET_KEYS) and not image_destination:
                 raise ValueError('dangerous input key or unbound asset path')
             if lower in ASSET_KEYS and not (isinstance(value, list) and len(value) == 2
                     and isinstance(value[0], str) and value[0] in graph and type(value[1]) is int and 0 <= value[1] <= 255):

@@ -182,12 +182,17 @@ class HttpClient:
                  allowed_download_hosts: Optional[FrozenSet[str]] = None,
                  cf_access_client_id: str = "",
                  cf_access_client_secret: str = "",
-                 server_connect_ip: str = ""):
+                 server_connect_ip: str = "", allow_redirects: bool = True):
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.connect_timeout = connect_timeout
         self.timeout = timeout
         self._server_opener = None
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *args, **kwargs):
+                raise ValueError('download redirect refused')
+
+        handlers = [] if allow_redirects else [NoRedirect()]
         if server_connect_ip:
             validate_server_connect_ip(base_url, server_connect_ip)
             origin = self._origin(base_url)
@@ -206,7 +211,9 @@ class HttpClient:
 
             # A proxy would resolve the target itself, defeating this override.
             self._server_opener = urllib.request.build_opener(
-                urllib.request.ProxyHandler({}), PinnedHTTPSHandler())
+                urllib.request.ProxyHandler({}), PinnedHTTPSHandler(), *handlers)
+        elif not allow_redirects:
+            self._server_opener = urllib.request.build_opener(*handlers)
         if bool(cf_access_client_id) != bool(cf_access_client_secret):
             raise ValueError(
                 "Cloudflare Access client ID and client secret must be set together"

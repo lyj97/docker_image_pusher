@@ -34,12 +34,15 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--tool-bin', action='append', default=[],
                         help='Explicit trusted tool directory (for FFmpeg, for example)')
     parser.add_argument('--no-keep-awake', action='store_true')
+    parser.add_argument('--attention', choices=('default', 'pytorch'), default='default')
     args = parser.parse_args(argv)
     validate(args)
     return args
 
 
 def validate(args: argparse.Namespace) -> None:
+    if getattr(args, 'attention', 'default') not in ('default', 'pytorch'):
+        raise ValueError('unsupported attention mode')
     root = absolute_path(args.root, directory=True)
     absolute_path(args.python, executable=True)
     absolute_path(args.frontend, directory=True)
@@ -64,6 +67,15 @@ def validate(args: argparse.Namespace) -> None:
         raise ValueError('runtime managers must be removed by the operator')
 
 
+def launcher_options(args: argparse.Namespace) -> list[str]:
+    options = ['--no-keep-awake'] if args.no_keep_awake else []
+    if getattr(args, 'attention', 'default') == 'pytorch':
+        options.extend(['--attention', 'pytorch'])
+    for path in getattr(args, 'tool_bin', []):
+        options.extend(['--tool-bin', path])
+    return options
+
+
 def launch_spec(
     args: argparse.Namespace, inherited: dict[str, str] | None = None,
 ) -> tuple[list[str], dict[str, str]]:
@@ -84,6 +96,8 @@ def launch_spec(
                '--listen', '127.0.0.1', '--port', str(args.port),
                '--disable-auto-launch', '--disable-api-nodes', '--cache-none',
                '--front-end-root', args.frontend]
+    if getattr(args, 'attention', 'default') == 'pytorch':
+        command.append('--use-pytorch-cross-attention')
     if inherited.get('H3COMFY_CAFFEINATED') == '1':
         env['H3COMFY_CAFFEINATED'] = '1'
     elif not args.no_keep_awake:

@@ -20,6 +20,7 @@ from contextlib import closing
 from pathlib import Path
 
 from .config import WorkerConfig
+from .http import HttpClient
 from .comfy_runner import (absent, maintenance_preflight, observe,
                            recovery_update_absence_ready)
 import vace_smoke as smoke
@@ -166,7 +167,23 @@ def node_install(config: WorkerConfig, args: argparse.Namespace) -> dict:
     with tempfile.TemporaryDirectory(prefix=".h3-node-", dir=root / "custom_nodes") as temporary:
         temporary = Path(temporary)
         archive = temporary / "node.tar"
-        size = download(args.url, args.sha256, archive, MAX_ARCHIVE_BYTES)
+        url = https_url(args.url)
+        if HttpClient._origin(url) == HttpClient._origin(config.server_url):
+            size = getattr(args, 'bytes', None)
+            if type(size) is not int or not 1 <= size <= MAX_ARCHIVE_BYTES:
+                raise ValueError('same-origin node archive requires bounded --bytes')
+            client = HttpClient(config.server_url, config.worker_token,
+                config.http_connect_timeout_seconds, config.http_timeout_seconds,
+                cf_access_client_id=config.cf_access_client_id,
+                cf_access_client_secret=config.cf_access_client_secret,
+                server_connect_ip=config.server_connect_ip, allow_redirects=False)
+            try:
+                size, _ = client.download(url, str(archive), digest(args.sha256),
+                                          size, MAX_ARCHIVE_BYTES, 30)
+            except Exception:
+                raise ValueError('authenticated node archive download refused') from None
+        else:
+            size = download(url, args.sha256, archive, MAX_ARCHIVE_BYTES)
         unpacked = temporary / "unpacked"
         unpacked.mkdir()
         extract_node(archive, unpacked)
@@ -340,9 +357,9 @@ def _job_pid(launchctl: Path, job: str) -> int:
     return int(match.group(1))
 
 
-def preview_launch_agent(config):
+def _launch_contract(config, *, require_packaged=True):
     """Stricter automatic-restart contract for the pinned preview instance."""
-    from .comfy_launch import absolute_path, arguments as launch_arguments
+    from .comfy_launch import absolute_path, arguments as launch_arguments, launcher_options
     job, launchctl = _launch_agent(config)
     home = Path.home()
     plist = home / 'Library/LaunchAgents' / f'{COMFY_JOB}.plist'
@@ -354,7 +371,7 @@ def preview_launch_agent(config):
                 break
             if parent.stat().st_uid != os.getuid() or parent.stat().st_mode & 0o022:
                 raise RuntimeError('unsafe LaunchAgent path ownership or permissions')
-    if launcher.read_bytes() != Path(__file__).with_name('comfy_launch.py').read_bytes():
+    if require_packaged and launcher.read_bytes() != Path(__file__).with_name('comfy_launch.py').read_bytes():
         raise RuntimeError('dedicated ComfyUI launcher differs from packaged launcher')
     root = root_for(config)
     python = absolute_path(config.comfyui_python, executable=True)
@@ -376,9 +393,11 @@ def preview_launch_agent(config):
     command = [str(python), '-I', '-B', str(launcher), '--root', str(root),
                '--python', str(python), '--frontend', config.comfyui_frontend_root,
                '--port', '8188']
-    if payload.get('ProgramArguments') == command + ['--no-keep-awake']:
-        command.append('--no-keep-awake')
-    launch_arguments(command[4:])
+    try:
+        selected = launch_arguments(payload.get('ProgramArguments', [])[4:])
+    except (SystemExit, ValueError) as error:
+        raise RuntimeError('invalid dedicated launcher options') from error
+    command.extend(launcher_options(selected))
     logs = home / 'Library/Logs/H3ComfyUI'
     for path in (logs / 'comfyui.stdout.log', logs / 'comfyui.stderr.log'):
         absolute_path(str(path))
@@ -401,11 +420,19 @@ def preview_launch_agent(config):
     return job, launchctl, plist, command
 
 
+def preview_launch_agent(config):
+    return _launch_contract(config)
+
+
 def preview_job_pid(config, launchctl, job):
     """Prove the loaded job matches the reviewed on-disk launch contract."""
     expected_job, expected_launchctl, plist, command = preview_launch_agent(config)
     if (job, launchctl) != (expected_job, expected_launchctl):
         raise RuntimeError('unexpected ComfyUI launchd job')
+    return _contract_job_pid(launchctl, job, plist, command)
+
+
+def _contract_job_pid(launchctl, job, plist, command):
     output = subprocess.run([str(launchctl), 'print', job], check=True,
         capture_output=True, text=True, timeout=5).stdout
     arguments = re.search(r'(?m)^\s*arguments = \{\s*\n(.*?)^\s*\}', output, re.S)
@@ -417,6 +444,88 @@ def preview_job_pid(config, launchctl, job):
     if not match:
         raise RuntimeError('dedicated ComfyUI LaunchAgent is not running')
     return int(match.group(1))
+
+
+def launcher_install(config: WorkerConfig, args: argparse.Namespace) -> dict:
+    """Replace only the managed Comfy launcher contract, never the Worker job."""
+    from .comfy_launch import arguments as launch_arguments
+    from .setup_comfy_launchd import generate
+    if args.attention not in ('default', 'pytorch'):
+        raise ValueError('unsupported attention selection')
+    root = mutation_preflight(config)
+    job, launchctl, plist, command = _launch_contract(config, require_packaged=False)
+    old_pid = _contract_job_pid(launchctl, job, plist, command)
+    selected = launch_arguments(command[4:])
+    selected.attention = args.attention
+    launcher = Path(command[3])
+    backups = {}
+    stop_attempted = False
+    start_attempted = False
+    try:
+        for path in (plist, launcher):
+            backups[path] = archive_existing(root, path)
+        generate(selected)
+        preview_launch_agent(config)
+        # launchd must reload ProgramArguments; kickstart would retain old options.
+        stop_attempted = True  # A timeout does not prove launchd did nothing.
+        subprocess.run([str(launchctl), 'bootout', job], check=True, timeout=50)
+        start_attempted = True
+        subprocess.run([str(launchctl), 'bootstrap', f'gui/{os.getuid()}', str(plist)],
+                       check=True, timeout=10)
+        deadline = time.monotonic() + RESTART_TIMEOUT
+        while True:
+            try:
+                new_pid = preview_job_pid(config, launchctl, job)
+                if new_pid == old_pid:
+                    raise RuntimeError('old ComfyUI process remains')
+                api = smoke.API(config.comfyui_url, timeout=3)
+                smoke.check_version(api, expected=config.comfyui_version)
+                if api.json('/queue') != {'queue_running': [], 'queue_pending': []}:
+                    raise RuntimeError('ComfyUI queue is not empty')
+                if not isinstance(api.json('/object_info'), dict):
+                    raise RuntimeError('ComfyUI nodes unavailable')
+                break
+            except (OSError, RuntimeError, subprocess.SubprocessError, smoke.SmokeError):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('installed ComfyUI launcher did not become ready')
+                time.sleep(1)
+        return {'operation': 'launcher-install', 'attention': args.attention,
+                'old_pid': old_pid, 'new_pid': new_pid, 'verified': True,
+                'launcher_sha256': hashlib.sha256(launcher.read_bytes()).hexdigest(),
+                'plist_sha256': hashlib.sha256(plist.read_bytes()).hexdigest(),
+                'archives': [str(path) for path in backups.values()]}
+    except Exception as original:
+        try:
+            present = _launch_job_present(launchctl, job) if stop_attempted else True
+            if start_attempted and present:
+                try:
+                    subprocess.run([str(launchctl), 'bootout', job],
+                        capture_output=True, text=True, timeout=50)
+                except subprocess.SubprocessError:
+                    pass  # Read launchd authority before deciding restoration is safe.
+                present = _launch_job_present(launchctl, job)
+                if present:
+                    raise RuntimeError('new ComfyUI job remains loaded; originals retained')
+            for path, backup in backups.items():
+                os.replace(backup, path)
+            if stop_attempted and not present:
+                subprocess.run([str(launchctl), 'bootstrap', f'gui/{os.getuid()}', str(plist)],
+                               check=True, timeout=10)
+        except Exception as rollback:
+            raise RuntimeError(f'launcher-install failed: {original}; '
+                               f'rollback failed: {rollback}') from original
+        raise
+
+
+def _launch_job_present(launchctl, job):
+    observed = subprocess.run([str(launchctl), 'print', job],
+        capture_output=True, text=True, timeout=5)
+    if observed.returncode == 0:
+        return True
+    if observed.returncode == 113 and 'Could not find service' in observed.stderr:
+        return False
+    observed.check_returncode()
+    raise RuntimeError('unknown ComfyUI job state')
 
 
 def restart(config: WorkerConfig, args: argparse.Namespace) -> dict:
@@ -602,6 +711,8 @@ def arguments(argv=None) -> argparse.Namespace:
     commands.add_parser("status")
     commands.add_parser("free")
     commands.add_parser("recover")
+    launcher = commands.add_parser("launcher-install")
+    launcher.add_argument("--attention", required=True, choices=("default", "pytorch"))
     save = commands.add_parser("workflow-save")
     save.add_argument("--name", required=True)
     save.add_argument("--input-stdin", action="store_true", required=True)
@@ -613,6 +724,8 @@ def arguments(argv=None) -> argparse.Namespace:
     install.add_argument("--name", required=True)
     install.add_argument("--url", required=True)
     install.add_argument("--sha256", required=True)
+    install.add_argument("--bytes", type=int,
+                         help="exact byte count required for same-origin H3 archives")
     install.add_argument("--requirements-sha256")
     install.add_argument("--replace", action="store_true")
     remove_node = commands.add_parser("node-remove")
@@ -633,6 +746,10 @@ def arguments(argv=None) -> argparse.Namespace:
 
 
 def main(argv=None) -> int:
+    supplied = sys.argv[1:] if argv is None else argv
+    if supplied[:1] == ["artifact-download"]:
+        from .artifact_download import main as download_main
+        return download_main(supplied[1:])
     args = arguments(argv)
     config = WorkerConfig.from_env()
     if args.operation == "workflow-save":
@@ -655,6 +772,8 @@ def main(argv=None) -> int:
         result = model_install(config, args)
     elif args.operation == "recover":
         result = recover(config)
+    elif args.operation == "launcher-install":
+        result = launcher_install(config, args)
     elif args.operation == "restart":
         result = restart(config, args)
     else:

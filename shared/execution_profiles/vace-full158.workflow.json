@@ -1,0 +1,396 @@
+{
+  "graph": {
+    "1": {
+      "inputs": {
+        "unet_name": "wan2.1_vace_14B_fp8_scaled.safetensors",
+        "weight_dtype": "default"
+      },
+      "class_type": "UNETLoader"
+    },
+    "2": {
+      "inputs": {
+        "model": [
+          "1",
+          0
+        ],
+        "shift": 8
+      },
+      "class_type": "ModelSamplingSD3"
+    },
+    "3": {
+      "inputs": {
+        "type": "wan",
+        "device": "default",
+        "clip_name": "umt5_xxl_fp16.safetensors"
+      },
+      "class_type": "CLIPLoader"
+    },
+    "4": {
+      "inputs": {
+        "clip": [
+          "3",
+          0
+        ],
+        "text": "A continuous close view of the same pilot-facing physical glass instrument. The central road-shaped status icon follows the control video: neutral gray during the spoken handover, then cyan when automatic control is established. The pilot hands, rigid double grips and common shaft, glass perspective, bezel, screws, canopy and metal nose retain their source shape and movement. Restrained gray and cyan light is attached to the physical screen."
+      },
+      "class_type": "CLIPTextEncode"
+    },
+    "5": {
+      "class_type": "ConditioningZeroOut",
+      "inputs": {
+        "conditioning": [
+          "4",
+          0
+        ]
+      }
+    },
+    "6": {
+      "inputs": {
+        "vae_name": "wan_2.1_vae.safetensors"
+      },
+      "class_type": "VAELoader"
+    },
+    "7": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "8": {
+      "inputs": {
+        "video": [
+          "7",
+          0
+        ]
+      },
+      "class_type": "GetVideoComponents"
+    },
+    "10": {
+      "inputs": {
+        "vae": [
+          "6",
+          0
+        ],
+        "width": 384,
+        "height": 256,
+        "length": 37,
+        "negative": [
+          "5",
+          0
+        ],
+        "positive": [
+          "4",
+          0
+        ],
+        "strength": 1,
+        "batch_size": 1,
+        "control_video": [
+          "8",
+          0
+        ],
+        "control_masks": [
+          "25",
+          0
+        ]
+      },
+      "class_type": "WanVaceToVideo"
+    },
+    "11": {
+      "inputs": {
+        "cfg": 5,
+        "seed": 90311501,
+        "model": [
+          "2",
+          0
+        ],
+        "steps": 1,
+        "denoise": 0.15,
+        "negative": [
+          "10",
+          1
+        ],
+        "positive": [
+          "10",
+          0
+        ],
+        "scheduler": "simple",
+        "latent_image": [
+          "26",
+          0
+        ],
+        "sampler_name": "euler"
+      },
+      "class_type": "KSampler"
+    },
+    "12": {
+      "inputs": {
+        "samples": [
+          "11",
+          0
+        ],
+        "trim_amount": [
+          "10",
+          3
+        ]
+      },
+      "class_type": "TrimVideoLatent"
+    },
+    "13": {
+      "inputs": {
+        "vae": [
+          "6",
+          0
+        ],
+        "samples": [
+          "12",
+          0
+        ]
+      },
+      "class_type": "VAEDecode"
+    },
+    "14": {
+      "inputs": {
+        "fps": 24,
+        "images": [
+          "46",
+          0
+        ],
+        "audio": [
+          "47",
+          0
+        ]
+      },
+      "class_type": "CreateVideo"
+    },
+    "15": {
+      "inputs": {
+        "codec": "h264",
+        "video": [
+          "14",
+          0
+        ],
+        "format": "mp4"
+      },
+      "class_type": "SaveVideo"
+    },
+    "17": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "18": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "17",
+          0
+        ]
+      }
+    },
+    "19": {
+      "class_type": "ImageToMask",
+      "inputs": {
+        "image": [
+          "18",
+          0
+        ],
+        "channel": "red"
+      }
+    },
+    "20": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "21": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "20",
+          0
+        ]
+      }
+    },
+    "22": {
+      "class_type": "ImageCompositeMasked",
+      "inputs": {
+        "destination": [
+          "43",
+          0
+        ],
+        "source": [
+          "13",
+          0
+        ],
+        "mask": [
+          "19",
+          0
+        ],
+        "x": 120,
+        "y": 480,
+        "resize_source": false
+      }
+    },
+    "23": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "24": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "23",
+          0
+        ]
+      }
+    },
+    "25": {
+      "class_type": "ImageToMask",
+      "inputs": {
+        "image": [
+          "24",
+          0
+        ],
+        "channel": "red"
+      }
+    },
+    "26": {
+      "class_type": "VAEEncode",
+      "inputs": {
+        "pixels": [
+          "8",
+          0
+        ],
+        "vae": [
+          "6",
+          0
+        ]
+      }
+    },
+    "40": {
+      "class_type": "LoadVideo",
+      "inputs": {
+        "file": null
+      }
+    },
+    "41": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "40",
+          0
+        ]
+      }
+    },
+    "42": {
+      "class_type": "ImageFromBatch",
+      "inputs": {
+        "image": [
+          "41",
+          0
+        ],
+        "batch_index": 0,
+        "length": 90
+      }
+    },
+    "43": {
+      "class_type": "ImageFromBatch",
+      "inputs": {
+        "image": [
+          "41",
+          0
+        ],
+        "batch_index": 90,
+        "length": 37
+      }
+    },
+    "44": {
+      "class_type": "ImageFromBatch",
+      "inputs": {
+        "image": [
+          "41",
+          0
+        ],
+        "batch_index": 127,
+        "length": 31
+      }
+    },
+    "45": {
+      "class_type": "ImageBatch",
+      "inputs": {
+        "image1": [
+          "42",
+          0
+        ],
+        "image2": [
+          "22",
+          0
+        ]
+      }
+    },
+    "46": {
+      "class_type": "ImageBatch",
+      "inputs": {
+        "image1": [
+          "45",
+          0
+        ],
+        "image2": [
+          "44",
+          0
+        ]
+      }
+    },
+    "47": {
+      "class_type": "LoadAudio",
+      "inputs": {
+        "audio": null
+      }
+    }
+  },
+  "bindings": [
+    {
+      "node_id": "7",
+      "input": "video",
+      "asset_id": "slot_0"
+    },
+    {
+      "node_id": "17",
+      "input": "video",
+      "asset_id": "slot_1"
+    },
+    {
+      "node_id": "20",
+      "input": "video",
+      "asset_id": "slot_2"
+    },
+    {
+      "node_id": "23",
+      "input": "video",
+      "asset_id": "slot_3"
+    },
+    {
+      "node_id": "47",
+      "input": "audio",
+      "asset_id": "slot_4"
+    },
+    {
+      "node_id": "40",
+      "input": "file",
+      "asset_id": "slot_5"
+    }
+  ],
+  "output_node": "15"
+}

@@ -1934,8 +1934,10 @@ class Worker:
     def _disk_free_bytes(self) -> int:
         try:
             st = os.statvfs(self.config.data_dir)
+            self._disk_free_error = None
             return st.f_bavail * st.f_frsize
-        except OSError:
+        except OSError as exc:
+            self._disk_free_error = exc.errno
             return 0
 
     async def _node_heartbeat(self, status: str, *,
@@ -2898,10 +2900,21 @@ class Worker:
                 if self.cancel_requested.is_set():
                     raise CancelRequested()
                 self._check_lease_alive()
-                if cpu_overlap.enabled(self) and self._disk_free_bytes() < self.config.min_free_disk_bytes:
-                    self._unhealthy_reason = 'overlap disk headroom exhausted'
-                    self._drain = True
-                    raise CancelRequested()
+                if cpu_overlap.enabled(self):
+                    free_bytes = self._disk_free_bytes()
+                    if free_bytes < self.config.min_free_disk_bytes:
+                        self._unhealthy_reason = 'overlap disk headroom exhausted'
+                        self._drain = True
+                        # Local protection is an engine failure, not cancellation or lease loss.
+                        engine_failed = {
+                            'code': 'ENGINE_FAILED',
+                            'message': (
+                                f'overlap disk headroom exhausted: free_bytes={free_bytes}, '
+                                f'min_free_disk_bytes={self.config.min_free_disk_bytes}, '
+                                f'statvfs_errno={getattr(self, "_disk_free_error", None)}'
+                            ),
+                        }
+                        break
                 try:
                     line = await asyncio.wait_for(
                         line_queue.get(), timeout=0.5
