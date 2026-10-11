@@ -7,16 +7,17 @@
     "burst/h3burst/audio_runner.py": "e71dcfad4901c4e8bb87c636d5790da80dd2a8b20a17bdcab04b5ae8a7f91b00",
     "burst/h3burst/control.py": "a2af480cf4e9d6c70d075bc12418232c5c35cc952d6176b8ee425cdb82b7ee82",
     "burst/h3burst/engine.py": "04a00c5dafbd7d566620493b64820406a30afbd47bf4d2a0acd5657b2362af12",
+    "burst/h3burst/execution_failure.py": "a3f02c0a07112cd6821ed6a08bf1297933792e2ae0b11043348e50a926b77f07",
     "burst/h3burst/executor.py": "40e0ba6bfd88bf125516227a935469dc72d32af45978349c46af4d887e2a67c8",
     "burst/h3burst/failure.py": "577c33e2fbc018a783d2a3ab0580580088ea08d15eb4b2f9be85edb3fed2f910",
     "burst/h3burst/inputs.py": "52793cea55da4822e99a523fa43149ae20aa634100f56cf425f9324fe919f156",
     "burst/h3burst/media.py": "a528ddae61fc83f6579db8b3769e31b661105d9bf8625d8b6bbe346111be585e",
     "burst/h3burst/observe.py": "3537c4d45a058e66dac035db548afcce00095487d82debebb86d42e224eef351",
-    "burst/h3burst/pod.py": "bbe54e3120c648c0273015134abb399a55e635ca1be6fc7630a24e67a49aa146",
+    "burst/h3burst/pod.py": "bc19fae1733e31d079b888dc7f366697a4cf60dc64874ee4d97ac457314dc6e8",
     "burst/h3burst/policy.py": "4a659e3d833c04287c094f3a215bb3b6c4e3a4aa6de0b60b3670fe6b4bb80959",
     "burst/h3burst/prepare.py": "39cc3e134a3684a39b406d73bbcf7b827e98c01e096d868a6783a06ccb8b528e",
-    "burst/h3burst/remote_runner.py": "91e3b904d9a8f915e1ebc07439b7248e93fc989492261b280793e0826e2f34dc",
-    "burst/h3burst/session.py": "5809ddacd26cf17d800ae3fd4b7adbbf2fe88eb2be5a9cad9a23210495ed96dd",
+    "burst/h3burst/remote_runner.py": "dc68f406d3b063ae9a5082c1226d0b1fe51a8c91b4b2b9384bcfe48ec338413f",
+    "burst/h3burst/session.py": "185a6b731aa78a028fbd3b9199b297c689add1380ba4c80acf0cd4a0004fa953",
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
     "burst/h3burst/transport.py": "18d8481912e984a8428373a53ccc94926ee13df70ce87cdc8b14353bf0bba0c4",
     "burst/h3burst/wait_capacity.py": "c0208c76018203140417acb0739b78e9fc0355d7dee3623ad8d88e9fc07f7747",
@@ -71,7 +72,7 @@
     "shared/comfy_versions.py": "fbc97847671199bd9dfd917d253299fb9c2048abb0f315b60d5d5c39d8f1cd39",
     "shared/comfy_workflow.py": "61fc1c7b289e0848961714d9caec22566e518e099a74290782d6d2765533f0e2",
     "shared/cuda_audio.py": "91dfe21c668caaa936da3291bc511e1ffd0b67c634a836eaf083b3b303e9ec01",
-    "shared/cuda_h3.py": "c77e5df5520cf42a7c318d3df84f48fc2ab434e0faf1e523b44ac8889b9b4d14",
+    "shared/cuda_h3.py": "0a31c1d546ae190955b43cdbfe76495cd40c15cbb3a00f428356f967e19ea023",
     "shared/execution.py": "34402061f3b28455cff81e9a79ed4b25af75dd9547b2ac018c19e114ea9fa87a",
     "shared/execution_profiles/audio-runtime.sources.json": "21205559714a0b1ba2c60c24caa489bbd6ad702b38dd854f878767436729fff1",
     "shared/execution_profiles/cosyvoice3.models.json": "cbf49ed8b53e96987b5ea4d17ae68cbf2cb1ce94afbd2137f50dfc81b4a484a8",
@@ -100,5 +101,5 @@
     "shared/ltx_policy.py": "d4ede1a24c6d822fde54209eb71d1e720535471f426347def95f81842d3330a5",
     "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "d58caf3d0a20bf55f584ebb11c6c0697a98bb4ba"
+  "source_revision": "e28ea470692e5b25e9ad1c7d6fc1704a2d20b887"
 }

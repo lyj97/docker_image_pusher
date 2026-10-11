@@ -8,6 +8,7 @@ from shared.execution import admitted_profiles, digest, task_references
 from h3worker import comfy_runner as local
 from h3worker.worker import NativeGroupUnproven, CancelRequested, LeaseLost, _shutdown_requested
 from .transport import RemoteError
+from .execution_failure import safe_failure, failure_message
 
 CAPABILITY, MODE = local.CAPABILITY, local.MODE
 state_for, persist, quarantine = local.state_for, local.persist, local.quarantine
@@ -56,6 +57,8 @@ def apply_observation(worker, attempt_id, state, view):
         unresolved(worker, 'remote execution identity conflict')
     state['prompt_id'] = view['prompt_id']
     state['graph_digest'] = view['graph_digest']
+    evidence = safe_failure(view.get('execution_error'))
+    if evidence is not None:state['execution_error'] = evidence
     if view.get('terminal') is True and view.get('state') in ('completed', 'failed', 'cancelled'):
         state.update(terminal=True, status=view['state'])
     persist(worker, attempt_id, state)
@@ -77,7 +80,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
         state.update(terminal=True, status='failed')
         persist(worker, attempt_id, state)
     if state and state.get('terminal') and state.get('status') != 'completed':
-        return False, {'code': 'ENGINE_FAILED', 'message': 'remote execution ended or provider stop confirmed'}
+        return False, {'code': 'ENGINE_FAILED', 'message': failure_message(state, 'remote execution ended or provider stop confirmed')}
     if state and (state.get('request_digest') != digest(task) or state.get('generation') != remote.generation
                   or state.get('url') != remote.base):
         unresolved(worker, 'remote binding changed while execution is unresolved')
@@ -151,7 +154,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 unresolved(worker, f'remote observation unavailable ({code}, HTTP {status}); retaining recovery intent')
             if state.get('terminal'):
                 if state['status'] != 'completed':
-                    return False, {'code': 'ENGINE_FAILED', 'message': 'remote ' + state['status']}
+                    return False, {'code': 'ENGINE_FAILED', 'message': failure_message(state, 'remote ' + state['status'])}
                 artifact = view['artifact']
                 name = 'result.wav' if task.get('mode')=='tts' else 'alignment.json' if task.get('mode')=='align' else 'result.mp4'
                 dest = Path(worker.config.attempt_dir(attempt_id)) / name

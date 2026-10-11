@@ -21,6 +21,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 from shared.execution import admitted_profiles, digest, execution_workflow, task_references
 from .transport import MAX_JSON
+from .execution_failure import history_failure
 
 TERMINAL = {'completed', 'failed', 'cancelled'}
 ID_RE = r'att_[A-Za-z0-9_-]{8,64}'
@@ -79,7 +80,7 @@ class Pod:
         # Original protocol journal has no prompts, URLs, tokens or outputs.
         with (self.root / 'protocol.log').open('a') as log:
             log.write(json.dumps({key: record.get(key) for key in
-                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error')}) + '\n')
+                ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error', 'execution_error')}) + '\n')
             log.flush()
             os.fsync(log.fileno())
 
@@ -213,7 +214,7 @@ class Pod:
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
-            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released') if key in record}
+            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released', 'execution_error') if key in record}
 
     def observe(self, execution):
         # Concurrent readers use durable state while one observer does slow Comfy I/O.
@@ -248,6 +249,9 @@ class Pod:
                 # Cancellation can update this record while Comfy/media I/O is running.
                 record = self.load(execution)
                 if record['state'] in TERMINAL:return self.public(record)
+                if state == 'failed':
+                    evidence = history_failure(output)
+                    if evidence is not None:record['execution_error'] = evidence
                 return self._apply_observation(record, state, artifact, artifact_error)
         finally:
             self.observation_lock.release()

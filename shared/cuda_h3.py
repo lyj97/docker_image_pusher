@@ -101,5 +101,4 @@ def workflow(task, profile):
                            {'positive': ['7', 0], 'latent': ['7', 1], 'frame_idx': 0,
                             'audio_vae': ['6', 0], 'audio': [node, 0]}}
             graph['9']['inputs']['conditioning'] = ['19', 0]
-            graph['15']['inputs']['latent_image'] = ['19', 1]
     return result

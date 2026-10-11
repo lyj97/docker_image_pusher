@@ -43,10 +43,13 @@ def private_stdio():
 
 class MCPProvider(Provider):
     """Private stdio transport for three normal MCP operations, not shell commands."""
-    def __init__(self, pod_id, *, input_fd=None, output=None, timeout=120):
+    def __init__(self, pod_id, *, source_pod_id=None, input_fd=None, output=None, timeout=120):
         if not re.fullmatch('[A-Za-z0-9]{8,64}', pod_id):
             raise ValueError('invalid bound Pod id')
         self.pod_id, self.sequence = pod_id, 0
+        if source_pod_id is not None and not re.fullmatch('[A-Za-z0-9]{8,64}', source_pod_id):
+            raise ValueError('invalid source Pod id')
+        self.source_pod_id = source_pod_id
         self.input_fd = sys.stdin.fileno() if input_fd is None else input_fd
         self.output = sys.stdout if output is None else output
         self.timeout, self.buffer = timeout, b''
@@ -98,7 +101,7 @@ class MCPProvider(Provider):
         return self.exchange('list_pods', params)
 
     def get(self, pod_id):
-        if pod_id != self.pod_id:
+        if not isinstance(pod_id, str) or pod_id not in (self.pod_id, self.source_pod_id):
             raise ValueError('provider Pod identity mismatch')
         return self.exchange('get_pod', {'id':pod_id})
 
@@ -116,6 +119,9 @@ def private_write(path, data):
     temp = path.with_name(path.name + '.pending')
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, 'w') as file:
+        if path.exists():
+            owner = path.stat()
+            os.fchown(file.fileno(), owner.st_uid, owner.st_gid)
         file.write(data)
         file.flush()
         os.fsync(file.fileno())
@@ -215,7 +221,7 @@ def renew(binding_path, env_path, operation, provider, h3, *, ttl=86400, now=Non
             private_write(binding_path, json.dumps(new_binding, indent=2) + '\n')
             receipt = {'operation': operation, 'pod_id': binding['pod_id'], 'status': 'EXITED',
                        'generation': generation, 'expires_at': expiry, 'completed': True,
-                       'started': False, 'cached': False}
+                       'started': False, 'cached': False, 'renewed_at': now, 'ttl_seconds': ttl}
             private_write(record / 'receipt.json', json.dumps(receipt))
             marker.unlink()
             return receipt
@@ -265,13 +271,23 @@ def adopt(binding_path, env_path, operation, pod_id, proof_path, renewal_id, ima
                 or proof.get('image')!=image:
             raise ValueError('unverified replacement source')
         parse=lambda value:datetime.fromisoformat(value.replace('Z','+00:00')).timestamp()
-        # Default renewal was 24h. Provider start remained before that renewal;
-        # both rejected starts left EXITED. No reused Comfy boot is authorized.
-        renewed_at=origin['expires_at']-86400
+        # Older receipts have no timestamp; their atomic publication mtime is trusted metadata.
+        renewed_at=origin.get('renewed_at', origin_path.stat().st_mtime)
         if not parse(proof['startedAt'])<renewed_at<=proof['observed_at']<=now:
             raise ValueError('source generation may have booted')
         inventory=provider.inventory()
-        if len(inventory)!=1 or inventory[0]['id']!=pod_id:raise ValueError('unique replacement required')
+        if sum(p.get('id') == pod_id for p in inventory) != 1 \
+                or any(p.get('id') != pod_id and
+                       (p.get('id') != proof['id'] or p.get('status') != 'EXITED')
+                       for p in inventory):
+            raise ValueError('one replacement and only its stopped source required')
+        if any(p.get('id') == proof['id'] for p in inventory):
+            source = provider.get(proof['id'])
+            if source.get('id') != proof['id'] or source.get('status') != 'EXITED' \
+                    or source.get('startedAt') != proof['startedAt'] \
+                    or source.get('image') != image or source.get('name') != binding['pod_name'] \
+                    or source.get('env', {}).get('H3POD_GENERATION') != binding['generation']:
+                raise ValueError('retained source changed or generation may have booted')
         pod=provider.get(pod_id);candidate=dict(binding,pod_id=pod_id)
         stopped=dict(pod,status='EXITED')
         if not safe_pod(stopped,candidate) or pod.get('status') not in ('PROVISIONING','STARTING','RUNNING','EXITED') \
@@ -324,7 +340,11 @@ def main():
             private_config(args.executor_env)
             inactive_services()
             binding = json.loads(args.binding.read_text())
-            provider = MCPProvider(args.adopt_pod or binding['pod_id']) if args.mcp_stdio else Provider(os.environ.get('RUNPOD_API_KEY'))
+            source_pod_id = None
+            if args.adopt_pod and args.old_pod_proof:
+                private_config(args.old_pod_proof)
+                source_pod_id = json.loads(args.old_pod_proof.read_text()).get('id')
+            provider = MCPProvider(args.adopt_pod or binding['pod_id'], source_pod_id=source_pod_id) if args.mcp_stdio else Provider(os.environ.get('RUNPOD_API_KEY'))
             h3=H3Control(binding.get('h3_admin_url','http://127.0.0.1:8730'),binding['worker_id'])
             if args.adopt_pod:
                 if not args.old_pod_proof or not args.renewal_id or not args.image:raise ValueError('adoption inputs required')
