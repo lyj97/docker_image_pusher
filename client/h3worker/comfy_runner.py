@@ -114,7 +114,8 @@ def bind_graph(task, local_inputs, root, namespace):
     folder = root / 'input' / namespace
     folder.mkdir(mode=0o700, exist_ok=False)
     types = {'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp',
-             'video/mp4': '.mp4', 'video/webm': '.webm', 'audio/wav': '.wav',
+             'video/mp4': '.mp4', 'video/webm': '.webm', 'video/x-matroska': '.mkv',
+             'audio/wav': '.wav',
              'audio/mpeg': '.mp3', 'audio/flac': '.flac', 'audio/ogg': '.ogg'}
     refs = {r['asset_id']: r for r in task['references']}
     try:

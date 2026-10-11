@@ -34,7 +34,7 @@
     "client/h3worker/comfy_native.py": "39be758cd1f423534b78c39aecc0bdc89cc0c23d176adfe8d247b041055ce850",
     "client/h3worker/comfy_preview.py": "e5a9ce32e1c2f2b8e2dfd42dc3a0a0925ae604df2b7fb953726c1a6d49ac1284",
     "client/h3worker/comfy_progress.py": "47a93ae27ac8a32c4e763dc814cf60abb5af19cb997d23aad05a19d27498ad06",
-    "client/h3worker/comfy_runner.py": "62e32723f30746f95fab72f8b4cad185371652c1226c7b7bb6aadc0947073fc0",
+    "client/h3worker/comfy_runner.py": "f0758551fd5e1b8e26f71432ff29c2f59da9bdb36e460742e7ca8d9ccce1f222",
     "client/h3worker/config.py": "58d4a563703902e6e0e1fb33c2db46214c9e21744b193fffddb962cb0eea9504",
     "client/h3worker/cpu_overlap.py": "7f96ed3dee4d59b30f2100dcd6dcd4697b2483b6639d3242c022886fcff72594",
     "client/h3worker/enable_qwen3.py": "27d16e5380181b612f6c032105d0f4da62de0bcbfb268f949aac4a5746b55963",
@@ -103,5 +103,5 @@
     "shared/reaction_profile.py": "ba5bda1a600cbdc88615aabe35f6616719c0f144ed8076b9c71baaca626c84c7",
     "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "fd4c8c069bbbf448780ed5fc5223a6e2be39fc02"
+  "source_revision": "b120ffa1fcab422099a208af6fe0d3ce20ac997d"
 }
