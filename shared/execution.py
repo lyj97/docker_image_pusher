@@ -121,7 +121,8 @@ def profiles():
         'profile_id','backend','gpu_vendor','comfy_version','comfy_commit','torch_version',
         'workflow_template','models','nodes','variable_inputs','generation_node','input_slots',
         'output_contract','flexible_media','official_lanpaint','runtime_sources','precision')})
-    return (profile, lan, audio, native, ref, *variants(profile), *audio_profiles(profile), official)
+    from .reaction_profile import profile as reaction_profile
+    return (profile, lan, audio, native, ref, *variants(profile), *audio_profiles(profile), official, reaction_profile(profile))
 
 
 def profile_by_id(identity):

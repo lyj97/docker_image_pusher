@@ -1,0 +1,304 @@
+{
+  "graph": {
+    "1": {
+      "inputs": {
+        "unet_name": "wan2.1_vace_14B_fp8_scaled.safetensors",
+        "weight_dtype": "default"
+      },
+      "class_type": "UNETLoader"
+    },
+    "2": {
+      "inputs": {
+        "model": [
+          "1",
+          0
+        ],
+        "shift": 16
+      },
+      "class_type": "ModelSamplingSD3"
+    },
+    "3": {
+      "inputs": {
+        "type": "wan",
+        "device": "default",
+        "clip_name": "umt5_xxl_fp16.safetensors"
+      },
+      "class_type": "CLIPLoader"
+    },
+    "4": {
+      "inputs": {
+        "clip": [
+          "3",
+          0
+        ],
+        "text": ""
+      },
+      "class_type": "CLIPTextEncode"
+    },
+    "5": {
+      "class_type": "ConditioningZeroOut",
+      "inputs": {
+        "conditioning": [
+          "4",
+          0
+        ]
+      }
+    },
+    "6": {
+      "inputs": {
+        "vae_name": "wan_2.1_vae.safetensors"
+      },
+      "class_type": "VAELoader"
+    },
+    "7": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "8": {
+      "inputs": {
+        "video": [
+          "7",
+          0
+        ]
+      },
+      "class_type": "GetVideoComponents"
+    },
+    "10": {
+      "inputs": {
+        "vae": [
+          "6",
+          0
+        ],
+        "width": 512,
+        "height": 512,
+        "length": 25,
+        "negative": [
+          "5",
+          0
+        ],
+        "positive": [
+          "4",
+          0
+        ],
+        "strength": 1,
+        "batch_size": 1,
+        "control_video": [
+          "8",
+          0
+        ],
+        "control_masks": [
+          "25",
+          0
+        ],
+        "reference_image": [
+          "29",
+          0
+        ]
+      },
+      "class_type": "WanVaceToVideo"
+    },
+    "11": {
+      "inputs": {
+        "cfg": 5,
+        "seed": 0,
+        "model": [
+          "2",
+          0
+        ],
+        "steps": 50,
+        "denoise": 1.0,
+        "negative": [
+          "10",
+          1
+        ],
+        "positive": [
+          "10",
+          0
+        ],
+        "scheduler": "simple",
+        "latent_image": [
+          "10",
+          2
+        ],
+        "sampler_name": "uni_pc"
+      },
+      "class_type": "KSampler"
+    },
+    "12": {
+      "inputs": {
+        "samples": [
+          "11",
+          0
+        ],
+        "trim_amount": [
+          "10",
+          3
+        ]
+      },
+      "class_type": "TrimVideoLatent"
+    },
+    "13": {
+      "inputs": {
+        "vae": [
+          "6",
+          0
+        ],
+        "samples": [
+          "12",
+          0
+        ]
+      },
+      "class_type": "VAEDecode"
+    },
+    "14": {
+      "inputs": {
+        "fps": 24,
+        "images": [
+          "22",
+          0
+        ]
+      },
+      "class_type": "CreateVideo"
+    },
+    "15": {
+      "inputs": {
+        "codec": "h264",
+        "video": [
+          "14",
+          0
+        ],
+        "format": "mp4"
+      },
+      "class_type": "SaveVideo"
+    },
+    "17": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "18": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "17",
+          0
+        ]
+      }
+    },
+    "19": {
+      "class_type": "ImageToMask",
+      "inputs": {
+        "image": [
+          "18",
+          0
+        ],
+        "channel": "red"
+      }
+    },
+    "20": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "21": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "20",
+          0
+        ]
+      }
+    },
+    "22": {
+      "class_type": "ImageCompositeMasked",
+      "inputs": {
+        "destination": [
+          "21",
+          0
+        ],
+        "source": [
+          "13",
+          0
+        ],
+        "mask": [
+          "19",
+          0
+        ],
+        "x": 0,
+        "y": 0,
+        "resize_source": false
+      }
+    },
+    "23": {
+      "class_type": "LanPaint_VideoMaskEditor",
+      "inputs": {
+        "video": null,
+        "keyframes": "{}",
+        "audio_mask": "[]"
+      }
+    },
+    "24": {
+      "class_type": "GetVideoComponents",
+      "inputs": {
+        "video": [
+          "23",
+          0
+        ]
+      }
+    },
+    "25": {
+      "class_type": "ImageToMask",
+      "inputs": {
+        "image": [
+          "24",
+          0
+        ],
+        "channel": "red"
+      }
+    },
+    "29": {
+      "class_type": "LoadImage",
+      "inputs": {
+        "image": null
+      }
+    }
+  },
+  "bindings": [
+    {
+      "node_id": "7",
+      "input": "video",
+      "asset_id": "slot_0"
+    },
+    {
+      "node_id": "17",
+      "input": "video",
+      "asset_id": "slot_1"
+    },
+    {
+      "node_id": "20",
+      "input": "video",
+      "asset_id": "slot_2"
+    },
+    {
+      "node_id": "23",
+      "input": "video",
+      "asset_id": "slot_3"
+    },
+    {
+      "node_id": "29",
+      "input": "image",
+      "asset_id": "slot_4"
+    }
+  ],
+  "output_node": "15"
+}
