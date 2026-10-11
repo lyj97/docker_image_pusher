@@ -148,7 +148,7 @@ class Pod:
                 record = self.load(execution)
                 if record['request_digest'] != request_digest:
                     raise Refused('execution_identity_conflict')
-                return self.observe(execution)  # NEVER resubmit, even after restart or lost reply.
+                return self.observation(execution)  # NEVER resubmit, even after restart or lost reply.
             reserved = self.db.execute('SELECT request_digest,released FROM upload_intent WHERE id=?',(execution,)).fetchone()
             if reserved and (reserved['released'] or reserved['request_digest'] != request_digest):
                 raise Refused('upload_identity_conflict')
@@ -168,7 +168,7 @@ class Pod:
             record = {'execution_id': execution, 'generation': self.generation,
                 'request_digest': request_digest, 'prompt_id': prompt, 'state': 'submitting',
                 'terminal': False, 'task': task, 'graph_digest': digest(task if audio else execution_task['workflow']['graph']),
-                'acceptance': acceptance, 'runtime_digest': digest({k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')}),
+                'acceptance': acceptance, 'pod_id': os.environ.get('RUNPOD_POD_ID'), 'runtime_digest': digest({k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')}),
                 'runtime_proof':{k:v for k,v in proof.items() if k not in ('ready','validation_artifact_sha256')},
                 'cancel_requested': False, 'started_at': time.time(), 'submission_started': False}
             if execution_task.get('references'):
@@ -235,7 +235,26 @@ class Pod:
 
     def public(self, record):
         return {key: record[key] for key in ('execution_id', 'generation', 'prompt_id', 'state',
-            'terminal', 'graph_digest', 'request_digest', 'cancel_requested', 'artifact', 'error_code', 'released', 'execution_error', 'diagnostic_write_failed') if key in record}
+            'terminal', 'graph_digest', 'request_digest', 'runtime_digest', 'cancel_requested', 'artifact', 'error_code', 'released', 'execution_error', 'diagnostic_write_failed') if key in record}
+
+    def active_snapshot(self):
+        with self.mutex:
+            return self.active()
+
+    def diagnostic(self, execution):
+        with self.mutex:
+            return self.load(execution).get('execution_diagnostic')
+
+    def observation(self, execution):
+        """HTTP readers never run Comfy or media validation; the supervisor does."""
+        with self.mutex:
+            record = self.load(execution)
+            if record.get('submission_started') is False and not record['terminal']:
+                record.update(state='failed', terminal=True, error_code='input_binding_interrupted')
+                self.save(record)
+            if record.get('observation_error') and not record['terminal']:
+                raise Refused('pod_observation_unavailable', 503)
+            return self.public(record)
 
     def observe(self, execution):
         # Concurrent readers use durable state while one observer does slow Comfy I/O.
@@ -263,6 +282,11 @@ class Pod:
                     record['observation_error'] = 'comfy_observation_unavailable'
                     self.save(record)
                 raise Refused('pod_observation_unavailable', 503) from None
+            # A valid new observation clears stale transport failure before slow media validation.
+            if state in ('pending', 'running', *TERMINAL):
+                with self.mutex:
+                    record = self.load(execution)
+                    if record.pop('observation_error', None) is not None:self.save(record)
             artifact, artifact_error, artifact_diagnostic = None, False, None
             if state == 'completed' and record.get('last_observation') == state:
                 try:artifact = self.engine.artifact(output, record)
@@ -318,8 +342,9 @@ class Pod:
             if not record['terminal']:
                 record['cancel_requested'] = True
                 self.save(record)
-                self.engine.cancel(record['prompt_id'])  # Prompt-scoped job cancellation only.
-            return self.observe(execution)
+        if not record['terminal']:
+            self.engine.cancel(record['prompt_id'])  # Prompt-scoped job cancellation only.
+        return self.observe(execution)
 
     def drain(self):
         with self.mutex:
@@ -465,7 +490,7 @@ def create_app(pod, token, expires_at):
                 path = await asyncio.to_thread(pod.artifact_path, execution)
                 return FileResponse(path, media_type='video/mp4', headers={'Cache-Control': 'no-store'})
             elif execution and request.method == 'GET' and not route:
-                value = await asyncio.to_thread(pod.observe, execution)
+                value = await asyncio.to_thread(pod.observation, execution)
             elif execution and request.method == 'POST' and route == 'release':
                 value = await asyncio.to_thread(pod.release, execution, body)
             elif execution and request.method == 'POST' and route == 'cancel':
@@ -475,8 +500,7 @@ def create_app(pod, token, expires_at):
             # Only the authenticated worker protocol receives operator diagnostics.
             # Public summaries and protocol.log never contain these original fields.
             if isinstance(value, dict) and value.get('execution_id'):
-                with pod.mutex:
-                    diagnostic = pod.load(value['execution_id']).get('execution_diagnostic')
+                diagnostic = await asyncio.to_thread(pod.diagnostic, value['execution_id'])
                 if diagnostic is not None:value = dict(value, execution_diagnostic=diagnostic)
             return JSONResponse(dict(value, generation=pod.generation), headers={'Cache-Control': 'no-store'})
         except Refused as exc:
@@ -493,10 +517,10 @@ def create_app(pod, token, expires_at):
                 try:
                     if time.time() >= expires_at:
                         await asyncio.to_thread(pod.drain)
-                        for record in pod.active():
+                        for record in await asyncio.to_thread(pod.active_snapshot):
                             if record['generation'] == pod.generation:
                                 await asyncio.to_thread(pod.cancel, record['execution_id'])
-                    with pod.mutex:active = pod.active()
+                    active = await asyncio.to_thread(pod.active_snapshot)
                     for record in active:
                         if record['generation'] == pod.generation:
                             await asyncio.to_thread(pod.observe, record['execution_id'])

@@ -1,14 +1,18 @@
 """Remote adapter for the existing H3 attempt, lease and artifact pipeline."""
 import asyncio
 import json
+import http.client
+import hashlib
+import os
 import re
+import time
 from pathlib import Path
 
 from shared.execution import admitted_profiles, digest, task_references
 from h3worker import comfy_runner as local
 from h3worker.worker import NativeGroupUnproven, CancelRequested, LeaseLost, _shutdown_requested
 from .transport import RemoteError
-from .execution_failure import safe_failure, failure_message, protocol_diagnostic, write_private
+from .execution_failure import safe_failure, failure_message, protocol_diagnostic, write_private, private_exception
 
 CAPABILITY, MODE = local.CAPABILITY, local.MODE
 state_for, persist, quarantine = local.state_for, local.persist, local.quarantine
@@ -43,6 +47,30 @@ def confirmed_stopped(worker, state):
         return False
 
 
+def capture_transport_failure(worker, attempt_id, state, error, origin):
+    """Keep the first transport cause locally; never expose its URL or message."""
+    try:
+        name='ssh-delivery-diagnostic.json' if origin=='ssh_delivery' else 'transport-diagnostic.json'
+        path = Path(worker.config.attempt_dir(attempt_id)) / name
+        if path.exists():return
+        row = worker.journal.get_attempt(attempt_id)
+        diagnostic = {'task_id': row['task_id'], 'execution_id': attempt_id,
+            'generation': state['generation'], 'prompt_id': state.get('prompt_id'),
+            'errors': [private_exception(origin, error)]}
+        cause = error.__cause__
+        reason = getattr(cause, 'reason', None)
+        if isinstance(reason, BaseException):
+            diagnostic['errors'].append(private_exception(origin, reason))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_private(path, diagnostic)
+        state['ssh_delivery_diagnostic_available' if origin=='ssh_delivery' else 'transport_diagnostic_available'] = True
+    except (OSError, ValueError):
+        if not state.get('diagnostic_write_failed'):
+            try:print('[cloud] diagnostic_write_failed attempt ' + attempt_id, flush=True)
+            except OSError:pass
+        state['diagnostic_write_failed'] = True
+
+
 def apply_observation(worker, attempt_id, state, view):
     if (not isinstance(view.get('prompt_id'), str)
             or not re.fullmatch('[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', view['prompt_id'])
@@ -55,8 +83,15 @@ def apply_observation(worker, attempt_id, state, view):
     if (view.get('generation') != state['generation'] or view.get('execution_id') != attempt_id
             or view.get('request_digest') != state['remote_request_digest']):
         unresolved(worker, 'remote execution identity conflict')
+    if any(state.get(key) is not None and state[key]!=view[key] for key in ('prompt_id','graph_digest')):
+        unresolved(worker,'remote prompt or graph identity conflict')
     state['prompt_id'] = view['prompt_id']
     state['graph_digest'] = view['graph_digest']
+    if view.get('runtime_digest') is not None:
+        if not isinstance(view['runtime_digest'],str) or not re.fullmatch('[0-9a-f]{64}',view['runtime_digest']) \
+                or state.get('runtime_digest',view['runtime_digest'])!=view['runtime_digest']:
+            unresolved(worker,'remote runtime identity conflict')
+        state['runtime_digest']=view['runtime_digest']
     if view.get('execution_diagnostic') is not None:
         try:
             diagnostic = protocol_diagnostic(view['execution_diagnostic'], attempt_id,
@@ -83,8 +118,101 @@ def apply_observation(worker, attempt_id, state, view):
     evidence = safe_failure(view.get('execution_error'))
     if evidence is not None:state['execution_error'] = evidence
     if view.get('terminal') is True and view.get('state') in ('completed', 'failed', 'cancelled'):
+        if view['state']=='completed':
+            artifact=view.get('artifact')
+            if not isinstance(artifact,dict) or type(artifact.get('size_bytes')) is not int or artifact['size_bytes']<=0 \
+                    or not isinstance(artifact.get('sha256'),str) or not re.fullmatch('[0-9a-f]{64}',artifact['sha256']):
+                unresolved(worker,'invalid remote artifact descriptor')
+            descriptor={key:artifact[key] for key in ('size_bytes','sha256')}
+            if state.get('remote_artifact',descriptor)!=descriptor:
+                unresolved(worker,'remote artifact identity conflict')
+            state['remote_artifact']=descriptor
         state.update(terminal=True, status=view['state'])
     persist(worker, attempt_id, state)
+
+
+async def stage_ssh_delivery(worker, attempt_id, state, task):
+    """One current-owner transfer, never a replacement inference or late STOP rescue."""
+    delivery = getattr(worker.remote, 'delivery', None)
+    from .delivery import SSHDelivery
+    if (not isinstance(delivery,SSHDelivery) or confirmed_stopped(worker,state)
+            or (worker.current_attempt or {}).get('attempt_id')!=attempt_id
+            or not state.get('prompt_id') or not state.get('graph_digest') or not state.get('runtime_digest')):
+        return None
+    worker._check_lease_alive()
+    if worker._transfer_should_abort():return None
+    request={key:state[key] for key in ('generation','prompt_id','graph_digest','runtime_digest')}
+    request.update(execution_id=attempt_id,request_digest=state['remote_request_digest'],pod_id=delivery.binding['pod_id'])
+    name='result.wav' if task.get('mode')=='tts' else 'alignment.json' if task.get('mode')=='align' else 'result.mp4'
+    destination=Path(worker.config.attempt_dir(attempt_id))/('ssh-'+name)
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    budget=30.0
+    if worker.lease_deadline_mono:
+        budget=min(budget,worker.lease_deadline_mono-time.monotonic())
+    if budget<=0:raise LeaseLost()
+    abort=lambda:worker._transfer_should_abort() or confirmed_stopped(worker,state)
+    recovered=None
+    if state.get('ssh_delivery_attempted'):
+        recovered=await asyncio.to_thread(recover_ssh_receipt,destination,request,abort,time.monotonic()+budget)
+        if recovered is None:return None
+    else:
+        state['ssh_delivery_attempted']=True;persist(worker,attempt_id,state)
+    view=recovered or await asyncio.to_thread(delivery.download,request,destination,abort,budget=budget)
+    worker._check_lease_alive()
+    if abort():raise CancelRequested()
+    # Identity remains the already known prompt/graph, not an alternative completion claim.
+    state['ssh_delivery_staged']=view['artifact']
+    apply_observation(worker,attempt_id,state,view)
+    return view
+
+
+def recover_ssh_receipt(destination, request, abort, deadline):
+    """Bounded local recovery never hashes a large file on the lease event loop."""
+    receipt=destination.with_name(destination.name+'.receipt.json')
+    if not destination.is_file() or not receipt.is_file():return None
+    if any(p.is_symlink() for p in (receipt,destination,*destination.parents)):
+        raise RemoteError('unsafe_delivery_destination')
+    try:
+        with receipt.open('rb') as source:raw=source.read(8193)
+        if len(raw)>8192:raise RemoteError('delivery_header_exceeds_bound')
+        view=json.loads(raw)
+        if (not isinstance(view,dict) or set(view)!=set(request)|{'terminal','state','artifact'}
+                or any(view.get(k)!=v for k,v in request.items())
+                or view.get('terminal') is not True or view.get('state')!='completed'):
+            raise RemoteError('delivery_identity_conflict')
+        size=0;sha=hashlib.sha256()
+        with destination.open('rb') as source:
+            while True:
+                if abort() or time.monotonic()>=deadline:raise RemoteError('transfer_aborted')
+                chunk=source.read(1024*1024)
+                if not chunk:break
+                size+=len(chunk)
+                if size>1024**3:raise RemoteError('artifact_exceeds_bound')
+                sha.update(chunk)
+        if view.get('artifact')!={'size_bytes':size,'sha256':sha.hexdigest()} or not size:
+            raise RemoteError('artifact_verification_failed')
+        return view
+    except (OSError,ValueError,UnicodeError) as exc:
+        raise RemoteError('ssh_delivery_failed') from exc
+
+
+def restore_ssh_stage(destination, descriptor):
+    """Keep the verified incoming inode intact across original-audio remux/recovery."""
+    from h3worker.worker import file_digest
+    source=destination.with_name('ssh-'+destination.name)
+    if any(p.is_symlink() for p in (source,destination,*source.parents)):
+        raise RemoteError('unsafe_delivery_destination')
+    size,sha=file_digest(source)
+    if size!=descriptor['size_bytes'] or sha!=descriptor['sha256']:
+        raise RemoteError('artifact_verification_failed')
+    partial=destination.with_name(destination.name+'.pending')
+    try:
+        os.link(source,partial,follow_symlinks=False)
+        os.replace(partial,destination)
+        directory=os.open(destination.parent,os.O_RDONLY|os.O_DIRECTORY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:partial.unlink(missing_ok=True)
 
 
 async def run(worker, attempt_id, lease_token, task, local_inputs):
@@ -136,6 +264,7 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
         try:
             view = await asyncio.to_thread(remote.json, '/v1/executions', body)
         except RemoteError as exc:
+            capture_transport_failure(worker, attempt_id, state, exc, 'submission')
             # 403/409 prove refusal only when no uncertain prior intent existed.
             if exc.code in ('profile_not_prepared', 'paid_acceptance_disabled', 'functional_acceptance_required',
                             'exclusive_slot_busy', 'invalid_execution', 'request_too_large', 'invalid_body'):
@@ -145,6 +274,10 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
             view = None  # Lost response: GET only, never repeat POST.
         if view is not None:
             apply_observation(worker, attempt_id, state, view)
+    # Recover a locally published SSH receipt before querying a broken HTTP channel.
+    if state.get('ssh_delivery_attempted') and not state.get('ssh_delivery_staged'):
+        try:await stage_ssh_delivery(worker,attempt_id,state,task)
+        except RemoteError as exc:capture_transport_failure(worker,attempt_id,state,exc,'ssh_delivery')
     phase, observation_failures = None, 0
     try:
         while True:
@@ -152,12 +285,28 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
             if _shutdown_requested(worker) or worker.cancel_requested.is_set():
                 raise CancelRequested()
             try:
-                view = await asyncio.to_thread(remote.json, '/v1/executions/' + attempt_id)
+                if state.get('terminal') and state.get('status')=='completed' and state.get('ssh_delivery_staged'):
+                    view={key:state[key] for key in ('generation','prompt_id','graph_digest')}
+                    view.update(execution_id=attempt_id,request_digest=state['remote_request_digest'],
+                        terminal=True,state='completed',artifact=state['ssh_delivery_staged'])
+                else:
+                    view = await asyncio.to_thread(remote.json, '/v1/executions/' + attempt_id)
                 apply_observation(worker, attempt_id, state, view)
                 observation_failures = 0
                 if state.pop('observation_error', None) is not None:
                     persist(worker, attempt_id, state)
             except RemoteError as exc:
+                capture_transport_failure(worker, attempt_id, state, exc, 'observation')
+                delivery_view = None
+                if exc.code == 'pod_unreachable':
+                    try:
+                        delivery_view=await stage_ssh_delivery(worker,attempt_id,state,task)
+                    except RemoteError as delivery_error:
+                        capture_transport_failure(worker,attempt_id,state,delivery_error,'ssh_delivery')
+                        persist(worker,attempt_id,state)
+                if delivery_view is not None:
+                    view=delivery_view
+                    continue
                 if exc.code == 'execution_not_found':
                     # This boot never committed an intent, so it could not POST to Comfy.
                     state.update(terminal=True, status='failed')
@@ -168,7 +317,8 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 state['observation_error'] = {'operation': 'get_execution', 'code': code, 'status': status}
                 persist(worker, attempt_id, state)
                 observation_failures += 1
-                print(f'[cloud] {attempt_id} GET observation: {code}, HTTP {status}, failure {observation_failures}', flush=True)
+                try:print(f'[cloud] {attempt_id} GET observation: {code}, HTTP {status}, failure {observation_failures}', flush=True)
+                except OSError:pass
                 if (code in ('pod_unreachable', 'pod_observation_unavailable')
                         or status in (502, 503, 504)) and observation_failures < 3:
                     # Re-read the same intent; a missing observation is not a failed inference.
@@ -181,8 +331,24 @@ async def run(worker, attempt_id, lease_token, task, local_inputs):
                 artifact = view['artifact']
                 name = 'result.wav' if task.get('mode')=='tts' else 'alignment.json' if task.get('mode')=='align' else 'result.mp4'
                 dest = Path(worker.config.attempt_dir(attempt_id)) / name
-                await asyncio.to_thread(remote.download, '/v1/executions/' + attempt_id + '/artifact',
-                    dest, artifact['size_bytes'], artifact['sha256'], worker._transfer_should_abort)
+                try:
+                    if not state.get('ssh_delivery_staged'):
+                        await asyncio.to_thread(remote.download, '/v1/executions/' + attempt_id + '/artifact',
+                            dest, artifact['size_bytes'], artifact['sha256'], worker._transfer_should_abort)
+                except (RemoteError, OSError, http.client.HTTPException) as exc:
+                    capture_transport_failure(worker, attempt_id, state, exc, 'artifact_validation')
+                    persist(worker, attempt_id, state)
+                    if (isinstance(exc,RemoteError) and exc.code=='pod_unreachable') or isinstance(exc,(TimeoutError,ConnectionError,http.client.HTTPException)):
+                        try:
+                            delivered=await stage_ssh_delivery(worker,attempt_id,state,task)
+                        except RemoteError as delivery_error:
+                            capture_transport_failure(worker,attempt_id,state,delivery_error,'ssh_delivery')
+                            persist(worker,attempt_id,state)
+                            raise
+                        if delivered is None:raise
+                    else:raise
+                if state.get('ssh_delivery_staged'):
+                    await asyncio.to_thread(restore_ssh_stage,dest,state['ssh_delivery_staged'])
                 if task.get('mode') == 'a2va':
                     from .media import original_soundtrack
                     await asyncio.to_thread(original_soundtrack, dest, local_inputs['ref:' + task['references'][0]['asset_id']], task, worker.config)
@@ -240,7 +406,11 @@ async def recover_orphans(worker):
             apply_observation(worker, row['attempt_id'], state, view)
             resolved |= state.get('terminal', False)
             pending |= not state.get('terminal', False)
-        except (RemoteError, NativeGroupUnproven):
+        except RemoteError as exc:
+            capture_transport_failure(worker, row['attempt_id'], state, exc, 'observation')
+            persist(worker, row['attempt_id'], state)
+            pending = True
+        except NativeGroupUnproven:
             pending = True
     if pending:
         quarantine(worker, 'unresolved remote prompt; cloud slot fenced')

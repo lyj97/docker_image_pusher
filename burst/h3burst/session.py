@@ -206,6 +206,7 @@ def renew(binding_path, env_path, operation, provider, h3, *, ttl=86400, now=Non
         new_env = dict(pod.get('env') or {}, **fields)
         lines[token_lines[0]] = 'H3BURST_POD_TOKEN=' + token
         new_binding = dict(binding, generation=generation)
+        new_binding.pop('ssh_delivery',None)  # A new generation needs fresh endpoint/host-key ownership.
         record.mkdir(mode=0o700)
         private_write(record / 'binding-before.json', old_binding)
         private_write(record / 'executor-before.env', old_env)
@@ -289,6 +290,7 @@ def adopt(binding_path, env_path, operation, pod_id, proof_path, renewal_id, ima
                     or source.get('env', {}).get('H3POD_GENERATION') != binding['generation']:
                 raise ValueError('retained source changed or generation may have booted')
         pod=provider.get(pod_id);candidate=dict(binding,pod_id=pod_id)
+        candidate.pop('ssh_delivery',None)
         stopped=dict(pod,status='EXITED')
         if not safe_pod(stopped,candidate) or pod.get('status') not in ('PROVISIONING','STARTING','RUNNING','EXITED') \
                 or pod.get('image')!=image or pod.get('disk')!=150 or pod.get('mounts') \
@@ -321,6 +323,51 @@ def adopt(binding_path, env_path, operation, pod_id, proof_path, renewal_id, ima
         return result
 
 
+def bind_delivery(binding_path, proof_path, operation, provider, h3):
+    """Publish only a fresh provider-readback SSH endpoint, under the existing startup latch."""
+    from .delivery import SSHDelivery
+    inactive_services()
+    for path in (binding_path,proof_path):private_config(Path(path))
+    if not re.fullmatch('[A-Za-z0-9_-]{8,64}',operation):raise ValueError('invalid maintenance identity')
+    binding_path=Path(binding_path);root=binding_path.parent;marker=root/'session-renewal.pending'
+    safe_root(marker);safe_root(root/'session-renewal.lock')
+    with (root/'session-renewal.lock').open('a') as lock:
+        os.chmod(lock.name,0o600);fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        if marker.exists():raise ValueError('unfinished session maintenance')
+        old=binding_path.read_text();binding=json.loads(old);proof=json.loads(Path(proof_path).read_text())
+        now=time.time()
+        if type(proof.get('observed_at')) not in (int,float) or not 0<=now-proof['observed_at']<=30:
+            raise ValueError('fresh SSH provider proof required')
+        candidate=proof.get('ssh_delivery')
+        transport=SSHDelivery(candidate,binding['generation'],binding['pod_id'])
+        pod=provider.get(binding['pod_id'])
+        ports=pod.get('portMappings') or {}
+        actual={'host':pod.get('publicIp'),'port':ports.get('22') or ports.get('22/tcp')}
+        if not actual['host']:
+            actual=next(({'host':p.get('ip'),'port':p.get('publicPort')} for p in (pod.get('runtime') or {}).get('ports',[])
+                if p.get('privatePort')==22 and p.get('isIpPublic') is True),{})
+        workers=h3.request('/v1/admin/workers').get('workers',[])
+        worker=next((w for w in workers if w.get('worker_id')==binding['worker_id']),{})
+        if pod.get('id')!=binding['pod_id'] or pod.get('status')!='RUNNING' \
+                or pod.get('env',{}).get('H3POD_GENERATION')!=binding['generation'] \
+                or actual!={'host':candidate['host'],'port':candidate['port']} \
+                or not h3.renewable() or worker.get('operator_draining') is not True \
+                or type(worker.get('capacity')) is not int or worker['capacity']<=0:
+            raise ValueError('SSH endpoint or owner maintenance mismatch')
+        history=root/'session-history';safe_root(history);history.mkdir(mode=0o700,exist_ok=True)
+        record=history/operation;safe_root(record)
+        if record.exists():raise ValueError('maintenance operation already exists')
+        record.mkdir(mode=0o700)
+        private_write(record/'binding-before.json',old)
+        private_write(marker,json.dumps({'operation':operation}))
+        updated=dict(binding,ssh_delivery=transport.binding)
+        private_write(binding_path,json.dumps(updated,indent=2)+'\n')
+        result={'operation':operation,'pod_id':binding['pod_id'],'generation':binding['generation'],
+            'completed':True,'provider_mutated':False,'started':False}
+        private_write(record/'receipt.json',json.dumps(result));marker.unlink()
+        return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binding', type=Path, required=True)
@@ -333,6 +380,7 @@ def main():
     parser.add_argument('--old-pod-proof',type=Path)
     parser.add_argument('--renewal-id')
     parser.add_argument('--image')
+    parser.add_argument('--bind-ssh-delivery',type=Path)
     args = parser.parse_args()
     try:
         with private_stdio() if args.mcp_stdio else nullcontext():
@@ -346,7 +394,10 @@ def main():
                 source_pod_id = json.loads(args.old_pod_proof.read_text()).get('id')
             provider = MCPProvider(args.adopt_pod or binding['pod_id'], source_pod_id=source_pod_id) if args.mcp_stdio else Provider(os.environ.get('RUNPOD_API_KEY'))
             h3=H3Control(binding.get('h3_admin_url','http://127.0.0.1:8730'),binding['worker_id'])
-            if args.adopt_pod:
+            if args.bind_ssh_delivery:
+                if args.adopt_pod or args.old_pod_proof or args.renewal_id or args.image:raise ValueError('exclusive SSH binding maintenance')
+                result=bind_delivery(args.binding,args.bind_ssh_delivery,args.id,provider,h3)
+            elif args.adopt_pod:
                 if not args.old_pod_proof or not args.renewal_id or not args.image:raise ValueError('adoption inputs required')
                 result=adopt(args.binding,args.executor_env,args.id,args.adopt_pod,
                     args.old_pod_proof,args.renewal_id,args.image,provider,h3)

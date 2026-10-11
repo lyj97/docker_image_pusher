@@ -59,8 +59,8 @@ class Transport:
             status = exc.code
             try:
                 raw = exc.read(MAX_JSON + 1)
-            except (OSError, urllib.error.URLError, http.client.HTTPException):
-                raise RemoteError('pod_unreachable') from None
+            except (OSError, urllib.error.URLError, http.client.HTTPException) as cause:
+                raise RemoteError('pod_unreachable') from cause
             finally:
                 exc.close()
             try:
@@ -69,15 +69,15 @@ class Transport:
                 error = {}
             code = error.get('error') if isinstance(error, dict) and error.get('generation') == self.generation else None
             raise RemoteError(code or 'pod_http_' + str(status), status) from None
-        except (OSError, urllib.error.URLError, http.client.HTTPException):
-            raise RemoteError('pod_unreachable') from None
+        except (OSError, urllib.error.URLError, http.client.HTTPException) as cause:
+            raise RemoteError('pod_unreachable') from cause
 
     def json(self, path, body=None):
         try:
             with self.request(path, body) as response:
                 raw = response.read(MAX_JSON + 1)
-        except (OSError, urllib.error.URLError, http.client.HTTPException):
-            raise RemoteError('pod_unreachable') from None
+        except (OSError, urllib.error.URLError, http.client.HTTPException) as cause:
+            raise RemoteError('pod_unreachable') from cause
         if len(raw) > MAX_JSON:
             raise RemoteError('response_too_large')
         try:

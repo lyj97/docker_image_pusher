@@ -6,20 +6,21 @@
     "burst/h3burst/audio_process.py": "95cf17e9020ba6c40f272ad5cc19f43334e2ac65d47542eb561e3feb9ad3558d",
     "burst/h3burst/audio_runner.py": "e71dcfad4901c4e8bb87c636d5790da80dd2a8b20a17bdcab04b5ae8a7f91b00",
     "burst/h3burst/control.py": "a2af480cf4e9d6c70d075bc12418232c5c35cc952d6176b8ee425cdb82b7ee82",
+    "burst/h3burst/delivery.py": "5aea37086ac2d0f9924a438543ac009fb8984ee16d4e543007ba378eef5a1cc1",
     "burst/h3burst/engine.py": "672bfc99ee1af5727e2bea813b748191b43d04c6cedff4ba89b59b226d33a935",
     "burst/h3burst/execution_failure.py": "38c14e0f8b5307c9a083d104113a35e4669751b235a9bc6e31ae20426540c5b0",
-    "burst/h3burst/executor.py": "40e0ba6bfd88bf125516227a935469dc72d32af45978349c46af4d887e2a67c8",
+    "burst/h3burst/executor.py": "cb2b7c99039de6336b188715b9725899e3d3c2614f9cdc6d92f408ac18796b40",
     "burst/h3burst/failure.py": "577c33e2fbc018a783d2a3ab0580580088ea08d15eb4b2f9be85edb3fed2f910",
     "burst/h3burst/inputs.py": "52793cea55da4822e99a523fa43149ae20aa634100f56cf425f9324fe919f156",
     "burst/h3burst/media.py": "a528ddae61fc83f6579db8b3769e31b661105d9bf8625d8b6bbe346111be585e",
     "burst/h3burst/observe.py": "3537c4d45a058e66dac035db548afcce00095487d82debebb86d42e224eef351",
-    "burst/h3burst/pod.py": "1f7e406a6da5c7b0baec3c3a6aa610dca9e025af5aee5384a4bc3f47fa5e240b",
+    "burst/h3burst/pod.py": "2bf594cb31d03812e9f0958f327a45ba78b4b41f4ffc2e6fb1c2fcc154551c4f",
     "burst/h3burst/policy.py": "4a659e3d833c04287c094f3a215bb3b6c4e3a4aa6de0b60b3670fe6b4bb80959",
     "burst/h3burst/prepare.py": "39cc3e134a3684a39b406d73bbcf7b827e98c01e096d868a6783a06ccb8b528e",
-    "burst/h3burst/remote_runner.py": "5a750a45971aebafdf8ca51f0baaccb5c3e3f650eacd582be1109899ba6d4789",
-    "burst/h3burst/session.py": "185a6b731aa78a028fbd3b9199b297c689add1380ba4c80acf0cd4a0004fa953",
+    "burst/h3burst/remote_runner.py": "e12a979932567cb186b131264c283dcf4bd25ccd21c424c771bd46413f636424",
+    "burst/h3burst/session.py": "15dd9f5c9a483eada0158dfb7bd7788e22df9c8fc07a8f5998c596ad234fd5b6",
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
-    "burst/h3burst/transport.py": "18d8481912e984a8428373a53ccc94926ee13df70ce87cdc8b14353bf0bba0c4",
+    "burst/h3burst/transport.py": "08d66118a47b383206bb4597fa39e284ee3939ab78cfb6fe4b34a05e98e33288",
     "burst/h3burst/wait_capacity.py": "c0208c76018203140417acb0739b78e9fc0355d7dee3623ad8d88e9fc07f7747",
     "client/comfy_h3_contract_node/__init__.py": "56cfaa21cbdd638f335e45731a72b1b12f4abf17dcb9348d0878fefe84dc83d7",
     "client/comfy_h3_reference_node/__init__.py": "3aba34c6c95fccc6549d4f0763756a32c6235532982ca23e571f21a07be8d2db",
@@ -103,5 +104,5 @@
     "shared/reaction_profile.py": "ba5bda1a600cbdc88615aabe35f6616719c0f144ed8076b9c71baaca626c84c7",
     "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "b120ffa1fcab422099a208af6fe0d3ce20ac997d"
+  "source_revision": "686ed4f891d312f133fdb89d98bcd1be7ac17b5c"
 }

@@ -329,6 +329,9 @@ def main():
     if cfg.worker_id != binding['worker_id'] or not Path(cfg.data_dir).is_absolute():
         raise ValueError('binding identity and absolute persistent data dir required')
     remote = Transport(binding['pod_url'], os.environ['H3BURST_POD_TOKEN'], binding['generation'])
+    if binding.get('ssh_delivery'):
+        from .delivery import SSHDelivery
+        remote.delivery = SSHDelivery(binding['ssh_delivery'], binding['generation'], binding['pod_id'])
     worker = CloudExecutor(cfg, remote, binding['approved_profiles'],
                            first_task_validation=binding.get('first_task_validation', False),
                            stop_on_error=binding.get('stop_on_error', False))
