@@ -193,10 +193,13 @@ class Engine:
             return
         try:
             value = self.api.json('/prompt', {'prompt': graph, 'prompt_id': prompt, 'client_id': prompt})
-        except vace_smoke.PromptRejected:
-            raise Refused('prompt_rejected') from None
+        except vace_smoke.PromptRejected as exc:
+            raise Refused('prompt_rejected') from exc
         if value.get('node_errors') or value.get('prompt_id') != prompt:
-            raise Refused('prompt_identity_uncertain')
+            error = Refused('prompt_identity_uncertain')
+            error.diagnostic = {'http_status':200, 'validation_response':json.dumps({
+                key:value[key] for key in ('node_errors','error','prompt_id') if key in value})}
+            raise error
 
     def observe(self, prompt, task):
         if task.get('mode') in ('tts','align'):return self.audio.observe(prompt)

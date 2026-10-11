@@ -6,17 +6,17 @@
     "burst/h3burst/audio_process.py": "95cf17e9020ba6c40f272ad5cc19f43334e2ac65d47542eb561e3feb9ad3558d",
     "burst/h3burst/audio_runner.py": "e71dcfad4901c4e8bb87c636d5790da80dd2a8b20a17bdcab04b5ae8a7f91b00",
     "burst/h3burst/control.py": "a2af480cf4e9d6c70d075bc12418232c5c35cc952d6176b8ee425cdb82b7ee82",
-    "burst/h3burst/engine.py": "04a00c5dafbd7d566620493b64820406a30afbd47bf4d2a0acd5657b2362af12",
-    "burst/h3burst/execution_failure.py": "a3f02c0a07112cd6821ed6a08bf1297933792e2ae0b11043348e50a926b77f07",
+    "burst/h3burst/engine.py": "672bfc99ee1af5727e2bea813b748191b43d04c6cedff4ba89b59b226d33a935",
+    "burst/h3burst/execution_failure.py": "38c14e0f8b5307c9a083d104113a35e4669751b235a9bc6e31ae20426540c5b0",
     "burst/h3burst/executor.py": "40e0ba6bfd88bf125516227a935469dc72d32af45978349c46af4d887e2a67c8",
     "burst/h3burst/failure.py": "577c33e2fbc018a783d2a3ab0580580088ea08d15eb4b2f9be85edb3fed2f910",
     "burst/h3burst/inputs.py": "52793cea55da4822e99a523fa43149ae20aa634100f56cf425f9324fe919f156",
     "burst/h3burst/media.py": "a528ddae61fc83f6579db8b3769e31b661105d9bf8625d8b6bbe346111be585e",
     "burst/h3burst/observe.py": "3537c4d45a058e66dac035db548afcce00095487d82debebb86d42e224eef351",
-    "burst/h3burst/pod.py": "bc19fae1733e31d079b888dc7f366697a4cf60dc64874ee4d97ac457314dc6e8",
+    "burst/h3burst/pod.py": "570da902042ae776bf1e52057b5fe83afff311cb60b7cd503d6e713ff8f44a48",
     "burst/h3burst/policy.py": "4a659e3d833c04287c094f3a215bb3b6c4e3a4aa6de0b60b3670fe6b4bb80959",
     "burst/h3burst/prepare.py": "39cc3e134a3684a39b406d73bbcf7b827e98c01e096d868a6783a06ccb8b528e",
-    "burst/h3burst/remote_runner.py": "dc68f406d3b063ae9a5082c1226d0b1fe51a8c91b4b2b9384bcfe48ec338413f",
+    "burst/h3burst/remote_runner.py": "52153f556c1702adc40089ab4c4d7fae186a8bd5a37a4b402e640592718b831e",
     "burst/h3burst/session.py": "185a6b731aa78a028fbd3b9199b297c689add1380ba4c80acf0cd4a0004fa953",
     "burst/h3burst/setup.py": "6a1af39fa6abe0b78a63fa04538429f371533c3fdb38cb947e04a6a6dd34243d",
     "burst/h3burst/transport.py": "18d8481912e984a8428373a53ccc94926ee13df70ce87cdc8b14353bf0bba0c4",
@@ -55,7 +55,7 @@
     "client/h3worker/upgrade.py": "787ed9a3eb934b7a4ec10bcc50501f6055daade036340a11003bd2da13c6285b",
     "client/h3worker/worker.py": "6a83f82813300574b04a79f37c54ee4248c9690b659937b29d05c5c029792bd4",
     "client/vace_reconcile.py": "dd739aae140a8dff834abc814f163756c98fc8f1e9afc6157567998b39f6a12e",
-    "client/vace_smoke.py": "c0fd0a7f5936507cf6edd46735358b32075d0b168b4ad23554daa931cb7109a0",
+    "client/vace_smoke.py": "9130a999d37076027e70dcaa390b81032612e139eaaec6712e946d02ccb6a605",
     "deploy/runpod/Dockerfile": "79940692120e5ce3391de7c18ef59025a8c37e185599001294ab7be2b24735f8",
     "deploy/runpod/Dockerfile.profile": "e8b5db8f260b0356422c6599aefaa8bfb9bd6dc52ed4cd71a6a0f0381ad5fd56",
     "deploy/runpod/build_audio.py": "4f3aaaa8ba0ef35c170b71fe135a3608605f7adb38b5d04dde7102fdc9364ad9",
@@ -103,5 +103,5 @@
     "shared/reaction_profile.py": "ba5bda1a600cbdc88615aabe35f6616719c0f144ed8076b9c71baaca626c84c7",
     "shared/runpod_media.py": "0b23abb70eab117a4cdc3be8792b6b093ff40837d25fbc6c34a1cbce4255346b"
   },
-  "source_revision": "2cc52e3566efec545d9440013e6b78431a1ee3b9"
+  "source_revision": "513834fcab58fc465077bd6e3ed4352cdbe65329"
 }

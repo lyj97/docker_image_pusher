@@ -43,6 +43,10 @@ class SmokeError(Exception):
 class PromptRejected(SmokeError):
     """ComfyUI explicitly rejected the prompt before queueing it."""
 
+    def __init__(self, message, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic
+
 
 def prompt_rejection(value):
     # Only the known validation envelope proves non-execution. Never expose
@@ -203,15 +207,22 @@ class API:
             with self.opener.open(request, timeout=self.timeout) as response:
                 raw = response.read(MAX_JSON + 1)
         except urllib.error.HTTPError as exc:
+            try:
+                raw = exc.read(MAX_JSON + 1)
+                exc.diagnostic = {'http_status': exc.code,
+                    'response_capture_truncated': len(raw) > MAX_JSON,
+                    'validation_response': raw.decode('utf-8', 'replace')}
+            except OSError:
+                raw = b''
             if path == '/prompt' and body is not None and 400 <= exc.code < 500 and exc.code != 408:
                 try:
-                    with exc:
-                        raw = exc.read(MAX_JSON + 1)
                     message = prompt_rejection(json.loads(raw)) if len(raw) <= MAX_JSON else None
                 except (OSError, ValueError, RecursionError):
                     message = None
                 if message is not None:
-                    raise PromptRejected('ComfyUI HTTP ' + str(exc.code) + ': ' + message) from None
+                    rejected = PromptRejected('ComfyUI HTTP ' + str(exc.code) + ': ' + message,
+                        exc.diagnostic)
+                    raise rejected from exc
             raise
         if len(raw) > MAX_JSON:
             raise SmokeError("HTTP JSON exceeds limit")

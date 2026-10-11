@@ -21,7 +21,7 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 from shared.execution import admitted_profiles, digest, execution_workflow, task_references
 from .transport import MAX_JSON
-from .execution_failure import history_failure
+from .execution_failure import history_failure, private_exception, private_history, write_private, validation_failure
 
 TERMINAL = {'completed', 'failed', 'cancelled'}
 ID_RE = r'att_[A-Za-z0-9_-]{8,64}'
@@ -83,6 +83,20 @@ class Pod:
                 ('execution_id', 'generation', 'state', 'prompt_id', 'cancel_requested', 'observation_error', 'execution_error')}) + '\n')
             log.flush()
             os.fsync(log.fileno())
+
+    def capture_failure(self, record, diagnostic):
+        if diagnostic is None:return
+        value = record.setdefault('execution_diagnostic', {'execution_id':record['execution_id'],
+            'generation':self.generation, 'prompt_id':record['prompt_id'], 'errors':[]})
+        # Keep the initial cause as well as recent failures; do not silently replace it.
+        if len(value['errors']) < 4:value['errors'].append(diagnostic)
+        else:value['errors'] = [value['errors'][0], *value['errors'][-2:], diagnostic]
+        try:
+            write_private(self.root / ('failure-' + record['execution_id'] + '.json'), value)
+        except (OSError, ValueError):
+            record['diagnostic_write_failed'] = True
+        evidence = validation_failure(diagnostic)
+        if evidence is not None:record['execution_error'] = evidence
 
     def active(self):
         return [json.loads(row[0]) for row in self.db.execute('SELECT record FROM execution')
@@ -174,7 +188,8 @@ class Pod:
                         raise Refused('input_identity_conflict', 400)
                     graph = copy.deepcopy(execution_task['workflow']['graph'])
                     graph[execution_task['workflow']['output_node']]['inputs']['filename_prefix'] = 'h3_' + prompt.replace('-', '') + '/video'
-            except BaseException:
+            except BaseException as exc:
+                self.capture_failure(record, private_exception('input_binding', exc))
                 record.update(state='failed', terminal=True, error_code='input_binding_failed')
                 self.save(record)
                 self.cleanup_inputs(record)
@@ -184,11 +199,14 @@ class Pod:
             try:
                 self.engine.submit(prompt, graph)
             except Refused as exc:
+                self.capture_failure(record, private_exception('submission', exc))
+                record['error_code'] = exc.code
                 if exc.code == 'prompt_rejected':
                     record.update(state='failed', terminal=True)
                 else:
                     record['state'] = 'uncertain'
-            except Exception:
+            except Exception as exc:
+                self.capture_failure(record, private_exception('submission', exc))
                 record['state'] = 'uncertain'
             else:
                 record['state'] = 'submitted'
@@ -235,21 +253,26 @@ class Pod:
                     return self.public(record)
             try:
                 state, output = self.engine.observe(record['prompt_id'], record['task'])
-            except Exception:
+            except Exception as exc:
                 with self.mutex:
                     record = self.load(execution)
+                    self.capture_failure(record, private_exception('observation', exc))
                     record['observation_error'] = 'comfy_observation_unavailable'
                     self.save(record)
                 raise Refused('pod_observation_unavailable', 503) from None
-            artifact, artifact_error = None, False
+            artifact, artifact_error, artifact_diagnostic = None, False, None
             if state == 'completed' and record.get('last_observation') == state:
                 try:artifact = self.engine.artifact(output, record)
-                except Exception:artifact_error = True
+                except Exception as exc:
+                    artifact_error = True
+                    artifact_diagnostic = private_exception('artifact_validation', exc)
             with self.mutex:
                 # Cancellation can update this record while Comfy/media I/O is running.
                 record = self.load(execution)
                 if record['state'] in TERMINAL:return self.public(record)
+                self.capture_failure(record, artifact_diagnostic)
                 if state == 'failed':
+                    self.capture_failure(record, private_history(output))
                     evidence = history_failure(output)
                     if evidence is not None:record['execution_error'] = evidence
                 return self._apply_observation(record, state, artifact, artifact_error)
@@ -446,6 +469,12 @@ def create_app(pod, token, expires_at):
                 value = await asyncio.to_thread(pod.cancel, execution)
             else:
                 raise Refused('not_found', 404)
+            # Only the authenticated worker protocol receives operator diagnostics.
+            # Public summaries and protocol.log never contain these original fields.
+            if isinstance(value, dict) and value.get('execution_id'):
+                with pod.mutex:
+                    diagnostic = pod.load(value['execution_id']).get('execution_diagnostic')
+                if diagnostic is not None:value = dict(value, execution_diagnostic=diagnostic)
             return JSONResponse(dict(value, generation=pod.generation), headers={'Cache-Control': 'no-store'})
         except Refused as exc:
             return JSONResponse({'error': exc.code, 'generation': pod.generation}, status_code=exc.status)

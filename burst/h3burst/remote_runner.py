@@ -8,7 +8,7 @@ from shared.execution import admitted_profiles, digest, task_references
 from h3worker import comfy_runner as local
 from h3worker.worker import NativeGroupUnproven, CancelRequested, LeaseLost, _shutdown_requested
 from .transport import RemoteError
-from .execution_failure import safe_failure, failure_message
+from .execution_failure import safe_failure, failure_message, protocol_diagnostic, write_private
 
 CAPABILITY, MODE = local.CAPABILITY, local.MODE
 state_for, persist, quarantine = local.state_for, local.persist, local.quarantine
@@ -57,6 +57,21 @@ def apply_observation(worker, attempt_id, state, view):
         unresolved(worker, 'remote execution identity conflict')
     state['prompt_id'] = view['prompt_id']
     state['graph_digest'] = view['graph_digest']
+    if view.get('execution_diagnostic') is not None:
+        try:
+            diagnostic = protocol_diagnostic(view['execution_diagnostic'], attempt_id,
+                state['generation'], view['prompt_id'])
+            row = worker.journal.get_attempt(attempt_id)
+            diagnostic = dict(diagnostic, task_id=row['task_id'])
+            path = Path(worker.config.attempt_dir(attempt_id)) / 'execution-diagnostic.json'
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_private(path, diagnostic)
+            state['diagnostic_available'] = True
+        except (OSError, ValueError):
+            state['diagnostic_write_failed'] = True
+    if view.get('error_code') in {'prompt_rejected','prompt_identity_uncertain','input_binding_failed','input_binding_interrupted',
+                                 'artifact_validation_failed','comfy_observation_unavailable'}:
+        state['error_code'] = view['error_code']
     evidence = safe_failure(view.get('execution_error'))
     if evidence is not None:state['execution_error'] = evidence
     if view.get('terminal') is True and view.get('state') in ('completed', 'failed', 'cancelled'):
