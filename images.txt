@@ -3,3 +3,4 @@ rustdesk/rustdesk-server:1.1.16
 --platform=linux/amd64 node:24.21.0-bookworm
 --platform=linux/amd64 python:3.14-bookworm
 --platform=linux/amd64 mcr.microsoft.com/playwright:v1.62.1-noble
+--platform=linux/amd64 deluan/navidrome:0.64.2
