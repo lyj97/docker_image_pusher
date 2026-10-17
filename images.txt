@@ -4,3 +4,4 @@ rustdesk/rustdesk-server:1.1.16
 --platform=linux/amd64 python:3.14-bookworm
 --platform=linux/amd64 mcr.microsoft.com/playwright:v1.62.1-noble
 --platform=linux/amd64 deluan/navidrome:0.64.2
+--platform=linux/amd64 ghcr.io/lyj97/h3-comfy:dependency-10c0e5f3@sha256:10c0e5f3cdffe5621ec26eb082e1557c605302334a6bc910f56687bc9009e7c2
