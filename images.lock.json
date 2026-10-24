@@ -1,0 +1,6 @@
+{
+  "gateway": "bunkerity/bunkerweb:1.6.17@sha256:3ee159b5428c0a51b672ef8aaecb1b2af270ea1793565021700dac71f7f438ab",
+  "scheduler": "bunkerity/bunkerweb-scheduler:1.6.17@sha256:1506e75b7ebfe06ff02e937d41eb64c9e39eb789635c12fc43672e73e89565d5",
+  "authelia": "authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54",
+  "ui": "bunkerity/bunkerweb-ui:1.6.17@sha256:86e192a96642fd82746a8bf771ed5f1b378cda706f5263f2c5b607cca547731c"
+}
