@@ -40,7 +40,13 @@ jobs:
         build-mount-path: '/var/lib/docker/'
 
     - name: Restart docker
-      run: sudo service docker restart
+      run: |
+        # Docker's containerd image store must use the expanded build disk too.
+        sudo systemctl stop docker.service docker.socket containerd.service
+        sudo mkdir -p /var/lib/docker/containerd-store
+        sudo rsync -a /var/lib/containerd/ /var/lib/docker/containerd-store/
+        sudo mount --bind /var/lib/docker/containerd-store /var/lib/containerd
+        sudo systemctl start containerd.service docker.service
 
     - name: Free up disk space complete
       run: |
